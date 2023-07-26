@@ -14,14 +14,13 @@ from functools import wraps
 from logging.handlers import RotatingFileHandler
 from os import makedirs
 from os.path import dirname, exists, isfile, join
-from sys import stdout
 
 import enlighten
 import requests
 import ring
 import sentry_sdk
 from binance.client import Client
-from binance.enums import (KLINE_INTERVAL_5MINUTE, ORDER_RESP_TYPE_RESULT,
+from binance.enums import (ORDER_RESP_TYPE_RESULT,
                            ORDER_TYPE_MARKET, SIDE_BUY, SIDE_SELL, KLINE_INTERVAL_1MINUTE)
 from binance.exceptions import BinanceAPIException
 from binance.helpers import interval_to_milliseconds
@@ -29,9 +28,8 @@ from dotenv import load_dotenv
 from freezegun import freeze_time
 from pandas import Series, DataFrame
 from ta.trend import SMAIndicator
-from ta.volatility import BollingerBands
 from pandas_ta.overlap.vwma import vwma
-
+from pandas_ta.overlap import supertrend
 
 load_dotenv(verbose=True)
 
@@ -558,6 +556,49 @@ class SignalGenerator:
                              "that returns Signal, used klines and reason.")
 
 
+class SuperTrendSignalGenerator(SignalGenerator):
+    def __init__(self, client, factor=3, atr_period=10) -> None:
+        self.client = client
+        self.factor = factor
+        self.atr_period = atr_period
+
+    def get_signal(self, dt, symbol, interval):
+
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        start_dt = datetime(2017, 1, 1)
+        klines = self.client.get_klines(
+            symbol=symbol, 
+            interval=interval, 
+            startTime=datetime_to_timestamp(start_dt), 
+            endTime=datetime_to_timestamp(end_dt))
+
+        klines = klines_to_python(klines)
+        if klines:
+            klines.pop(-1) ## current kline not closed
+
+        ind = supertrend(
+            Series(x["high"] for x in klines),
+            Series(x["low"] for x in klines),
+            Series(x["close"] for x in klines),
+            self.atr_period,
+            self.factor
+        )
+        directions = ind.iloc[:,1]
+
+        if directions.iat[-2] > directions.iat[-1]:
+            return ActionType.SELL, klines, "Direction changed from: %s to %s" % (
+                directions.iat[-2], directions.iat[-1]
+            )
+        
+        if directions.iat[-1] > directions.iat[-2]:
+            return ActionType.BUY, klines, "Direction changed from: %s to %s" % (
+                directions.iat[-2], directions.iat[-1]
+            )
+        
+        return ActionType.STAY, klines, \
+               f'No new signal generated {directions.iat[-2]} {directions.iat[-1]}'
+
 class VWMASignalGenerator(SignalGenerator):
     def __init__(self, client, signal_length=20):
         self.client = client
@@ -771,7 +812,7 @@ class AllInActionGenerator(ActionGenerator):
         min_quantity = Decimal(lot_info['minQty'])
         step_size = Decimal(lot_info['stepSize'])
 
-        min_notional_info = self.get_symbol_filter(symbol, 'MIN_NOTIONAL')
+        min_notional_info = self.get_symbol_filter(symbol, 'NOTIONAL')
         min_notional = Decimal(min_notional_info['minNotional'])
         # max_quantity = Decimal(lot_info['maxQty'])
         # I hope some day we have rich enough to calculate max quantity of
@@ -1218,8 +1259,8 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
     action_generator = AllInActionGenerator(
         client,
         signal_generators={
-            'SMA Signal Generator':
-                SMASignalGenerator(client, signal_length=50),
+            'Supertrend Indicator':
+                SuperTrendSignalGenerator(client),
         },
         investment_multiplier=Decimal(0.2)
     )
