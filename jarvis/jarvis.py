@@ -43,6 +43,7 @@ BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
 
 
 COMMISSION_RATIO = Decimal(0.001)
+INVESTMENT_RATIO = Decimal(0.2)
 DAY_AS_TIMEDELTA = timedelta(days=1)
 
 
@@ -788,6 +789,8 @@ class AllInActionGenerator(ActionGenerator):
                  investment_multiplier=1):
         super().__init__(client, signal_generators=signal_generators)
         self.investment_multiplier = investment_multiplier
+        self.quote_asset_per_quantity = 0
+        self.bought_assets = set()
 
     def get_action(self, dt, symbol, interval):
         symbol_info = self.client.get_symbol_info(symbol)
@@ -848,15 +851,22 @@ class AllInActionGenerator(ActionGenerator):
                        'I would sell but there are not enough ' \
                        f'{base_asset} in wallet (' + \
                        decimal_as_str(base_asset_quantity) + ') (MIN_NOTIONAL)'
+            
+            self.bought_assets.remove(symbol)
+            if len(self.bought_assets) == 0:
+                self.quote_asset_per_quantity = 0
 
         if most_common_signal == ActionType.BUY:
-            quote_asset_quantity = Decimal(
-                self.client.get_asset_balance(
-                    asset=quote_asset)['free']) * \
-                                   self.investment_multiplier
+            if self.quote_asset_per_quantity == 0:
+                tradable_asset_quantity = Decimal(
+                    self.client.get_asset_balance(
+                        asset=quote_asset)['free']) * \
+                                    self.investment_multiplier
+            else:
+                tradable_asset_quantity = self.quote_asset_per_quantity
 
             quote_asset_quantity = \
-                int(quote_asset_quantity / step_size) * step_size
+                int(tradable_asset_quantity / step_size) * step_size
 
             if quote_asset_quantity <= market_min_quantity:
                 return ActionType.STAY, None, None, \
@@ -877,6 +887,10 @@ class AllInActionGenerator(ActionGenerator):
                        f'{quote_asset} in wallet (' + \
                        decimal_as_str(
                            quote_asset_quantity) + ') (MIN_NOTIONAL)'
+
+            if len(self.bought_assets) == 0:
+                self.quote_asset_per_quantity = tradable_asset_quantity
+            self.bought_assets.add(symbol)
 
         return most_common_signal, base_asset_quantity, quote_asset_quantity, \
                f'All signals that I have says {most_common_signal.value}'
@@ -1249,7 +1263,7 @@ def get_binance_client(fake=False, extra_params=None):
 
 
 def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
-             end_dt, commission_ratio):
+             end_dt, commission_ratio, investment_ratio):
     bar_manager = enlighten.get_manager()
 
     client = get_binance_client(fake=True, extra_params={
@@ -1262,7 +1276,7 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
             'Supertrend Indicator':
                 SuperTrendSignalGenerator(client),
         },
-        investment_multiplier=Decimal(0.2)
+        investment_multiplier=investment_ratio
     )
     interval_as_timedelta = interval_to_timedelta(interval)
 
@@ -1306,8 +1320,10 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
 
                     if base_asset_quantity:
                         params.update({'quantity': base_asset_quantity})
-
-                    client.create_order(**params)
+                    try:
+                        client.create_order(**params)
+                    except Exception as e:
+                        logger.info(e)
                 if idx == total_intervals - 1 and idx2 == len(trade_assets) - 1:
                     logger.info("Total worth: %s", client.get_total_usdt())
         bar.update()
@@ -1315,7 +1331,7 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
     logger.debug(client.get_total_usdt())
 
 
-def trade(base_asset, trade_assets, interval):
+def trade(base_asset, trade_assets, interval, investment_ratio):
     client = get_binance_client()
     action_generator = AllInActionGenerator(
         client,
@@ -1323,7 +1339,7 @@ def trade(base_asset, trade_assets, interval):
             'Supertrend Signal':
                 SuperTrendSignalGenerator(client)
         },
-        investment_multiplier=Decimal(0.2)
+        investment_multiplier=investment_ratio
     )
     dt = datetime.utcnow()
     grouped_actions = {ActionType.BUY: "", ActionType.SELL: ""}
@@ -1357,7 +1373,11 @@ def trade(base_asset, trade_assets, interval):
                 'quantity': decimal_as_str(base_asset_quantity)
             })
 
-        order = client.create_order(**params)
+        try:
+            order = client.create_order(**params)
+        except Exception as e:
+            logger.info(e)
+            continue
 
         # * 100 ETH for 20 USDT (BTCUSDT)
 
@@ -1444,6 +1464,13 @@ if __name__ == '__main__':
              % decimal_as_str(COMMISSION_RATIO)
     )
 
+    backtest_parser.add_argument(
+        '-ir', dest="investment_ratio", default=INVESTMENT_RATIO, type=Decimal,
+        metavar="INVESTMENT_RATIO",
+        help='Investment ratio of platform. Default: %s'
+             % decimal_as_str(INVESTMENT_RATIO)
+    )
+
     doctest_parser.add_argument(
         '-v', dest="verbose", default=False,
         action="store_true", help="Gives verbose output when set.")
@@ -1462,6 +1489,13 @@ if __name__ == '__main__':
         '-i', dest="interval", default="1h", metavar="INTERVAL",
         type=str, help='Interval of klines to check.')
 
+    trade_parser.add_argument(
+        '-ir', dest="investment_ratio", default=INVESTMENT_RATIO, type=Decimal,
+        metavar="INVESTMENT_RATIO",
+        help='Investment ratio of platform. Default: %s'
+             % decimal_as_str(INVESTMENT_RATIO)
+    )
+
     kwargs = parser.parse_args()
 
     if kwargs.env_path:
@@ -1479,8 +1513,8 @@ if __name__ == '__main__':
     elif kwargs.subparser == 'backtest':
         backtest(kwargs.base_asset, kwargs.starting_amount,
                  kwargs.trade_assets, kwargs.interval, kwargs.start_dt,
-                 kwargs.end_dt, kwargs.commission_ratio)
+                 kwargs.end_dt, kwargs.commission_ratio, kwargs.investment_ratio)
         print('Output written to backtest.log')
     elif kwargs.subparser == 'trade':
         trade(kwargs.base_asset, kwargs.trade_assets,
-              kwargs.interval)
+              kwargs.interval, kwargs.investment_ratio)
