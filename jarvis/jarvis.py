@@ -1316,13 +1316,12 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
 
 
 def trade(base_asset, trade_assets, interval):
-    fake_client = get_binance_client(fake=True)
     client = get_binance_client()
     action_generator = AllInActionGenerator(
         client,
         signal_generators={
-            'SMA Signal Generator':
-                SMASignalGenerator(fake_client, signal_length=50)
+            'Supertrend Signal':
+                SuperTrendSignalGenerator(client)
         },
         investment_multiplier=Decimal(0.2)
     )
