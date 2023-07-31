@@ -587,62 +587,78 @@ class SuperTrendSignalGenerator(SignalGenerator):
         )
         directions = ind.iloc[:,1]
 
-        if directions.iat[-2] > directions.iat[-1]:
-            return ActionType.SELL, klines, "Direction changed from: %s to %s" % (
-                directions.iat[-2], directions.iat[-1]
-            )
+        try:
+
+            if directions.iat[-2] > directions.iat[-1]:
+                return ActionType.SELL, klines, "Direction changed from: %s to %s" % (
+                    directions.iat[-2], directions.iat[-1]
+                )
+            
+            if directions.iat[-1] > directions.iat[-2]:
+                return ActionType.BUY, klines, "Direction changed from: %s to %s" % (
+                    directions.iat[-2], directions.iat[-1]
+                )
         
-        if directions.iat[-1] > directions.iat[-2]:
-            return ActionType.BUY, klines, "Direction changed from: %s to %s" % (
-                directions.iat[-2], directions.iat[-1]
-            )
+        except IndexError:
+            return ActionType.STAY, klines, "Error"
         
         return ActionType.STAY, klines, \
                f'No new signal generated {directions.iat[-2]} {directions.iat[-1]}'
 
 class VWMASignalGenerator(SignalGenerator):
-    def __init__(self, client, signal_length=20):
+    def __init__(self, client, signal_length=20, base_asset="USDT"):
         self.client = client
         self.length = signal_length
+        self.base_asset = base_asset
 
     def get_signal(self, dt, symbol, interval):
-        needed_num_of_candles = 2 * self.length - 1
         interval_as_timedelta = interval_to_timedelta(interval)
         end_dt = floor_dt(dt, interval_as_timedelta)
-        start_dt = end_dt - interval_as_timedelta * needed_num_of_candles
+        start_dt = datetime(2017, 1, 1)
         klines = self.client.get_klines(
-            symbol=symbol, interval=interval,
-            startTime=datetime_to_timestamp(start_dt),
+            symbol=symbol, 
+            interval=interval, 
+            startTime=datetime_to_timestamp(start_dt), 
             endTime=datetime_to_timestamp(end_dt))
-        trade_asset = symbol.replace("USDT", "")
-        buy_price = self.client.positions[trade_asset]['avg_buy_price']
+        buy_price = 0
 
         klines = klines_to_python(klines)
         if klines:
             klines.pop(-1) ## current kline not closed
 
+        ohlc4 = Series((x['close'] + x['open'] + x['high'] + x['low']) / 4 for x in klines)
+
         vwma_arr = vwma(
-            Series(x['close'] for x in klines),
+            ohlc4,
             Series(x['volume'] for x in klines),
             self.length)
-        vwma_arr = vwma_arr.dropna() # because of signal length there are na values
 
-        if vwma_arr.empty: # if no values then no decision
-            return ActionType.STAY, klines, \
-               f'No new signal generated'
+        action = ActionType.STAY
+        actions = [action]
 
-        highest_vwma = max(vwma_arr)
-        lowest_vwma = min(vwma_arr)
-        last_kline = klines[-1]
-
-        if last_kline['close'] > highest_vwma and buy_price == 0:
+        for i in range(self.length, len(ohlc4)):
+            highest_vwma = max(vwma_arr[i:-self.length + i:-1])
+            lowest_vwma = min(vwma_arr[i:-self.length + i:-1])
+            close = ohlc4.iat[i]
+            if close > highest_vwma and actions[-1] != ActionType.BUY and buy_price == 0:
+                action = ActionType.BUY
+                buy_price = close
+            elif close < lowest_vwma and actions[-1] != ActionType.SELL and buy_price != 0:
+                action = ActionType.SELL
+                buy_price = 0
+            else:
+                action = ActionType.STAY
+            
+            actions.append(action)
+        
+        if actions[-1] == ActionType.BUY:
             return ActionType.BUY, klines, "Close: %s is greater than VWMA: %s" % (
-                decimal_as_str(last_kline['open']), decimal_as_str(highest_vwma)
+                decimal_as_str(ohlc4.iat[-1]), decimal_as_str(highest_vwma)
             )
 
-        if last_kline['close'] < lowest_vwma:
+        if actions[-1] == ActionType.SELL:
             return ActionType.SELL, klines, "Close: %s is smaller than VWMA: %s" % (
-                decimal_as_str(last_kline['open']), decimal_as_str(lowest_vwma)
+                decimal_as_str(ohlc4.iat[-1]), decimal_as_str(lowest_vwma)
             )
 
         return ActionType.STAY, klines, \
@@ -1273,8 +1289,8 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
     action_generator = AllInActionGenerator(
         client,
         signal_generators={
-            'Supertrend Indicator':
-                SuperTrendSignalGenerator(client),
+            'VWMA':
+                VWMASignalGenerator(client),
         },
         investment_multiplier=investment_ratio
     )
