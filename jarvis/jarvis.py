@@ -30,6 +30,8 @@ from pandas import Series, DataFrame
 from ta.trend import SMAIndicator
 from pandas_ta.overlap.vwma import vwma
 from pandas_ta.overlap import supertrend
+import pandas as pd
+import mplfinance as mpf
 
 load_dotenv(verbose=True)
 
@@ -976,6 +978,7 @@ class FakeClient:
         self.positions = defaultdict(lambda: {
             "avg_buy_price": 0,
         })
+        self.order_history = defaultdict(list)
         self.asset_report = defaultdict(lambda: {
             "successful_trades": 0,
             "total_trades": 0,
@@ -1220,6 +1223,8 @@ quantity=1, type=ORDER_TYPE_MARKET)
                         self.positions[base_asset]["avg_buy_price"])
             else:
                 self.positions[base_asset]["avg_buy_price"] = price
+            self.order_history[params["symbol"]].append({
+                "side": "buy", "open_time": now_as_utc, "quantity": quantity})
             self.assets[base_asset] += quantity
             self.assets[quote_asset] -= quote_order_quantity
         else:
@@ -1245,6 +1250,9 @@ quantity=1, type=ORDER_TYPE_MARKET)
             self.asset_report[base_asset]["ratio"] = \
                 100 * self.asset_report[base_asset]["successful_trades"] / \
                 self.asset_report[base_asset]["total_trades"]
+            self.order_history[params["symbol"]].append({
+                "side": "sell", "open_time": now_as_utc, "quantity": quantity
+            })
             self.positions[base_asset]["avg_buy_price"] = 0
             self.assets[base_asset] -= quantity
             self.assets[quote_asset] += quote_order_quantity
@@ -1269,6 +1277,39 @@ quantity=1, type=ORDER_TYPE_MARKET)
 
     def get_total_usdt(self):
         return assets_to_usdt(self, self.assets)
+
+    def generate_order_chart(self, symbol, dt, interval, base_asset):
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        start_dt = datetime(2017, 1, 1)
+        klines = self.get_klines(
+            symbol=symbol, 
+            interval=interval, 
+            startTime=datetime_to_timestamp(start_dt), 
+            endTime=datetime_to_timestamp(end_dt))
+
+        klines = klines_to_python(klines)
+        df = pd.DataFrame(klines)
+        df.set_index("open_time", inplace=True)
+        
+        order_df = pd.DataFrame(self.order_history[symbol])
+        order_df.set_index("open_time", inplace=True)
+
+        def calculate_marker_price(row):
+            if row["side"] == "buy":
+                return row["low"] * 0.95
+            elif row["side"] == "sell":
+                return row["high"] * 1.05
+            else:
+                return None
+
+        df = pd.concat([df, order_df], axis=1)
+
+        df["marker"] = df.apply(calculate_marker_price, axis=1)
+        mpf.plot(
+            df, type="candle", style="charles", title=f"{symbol} chart", 
+            ylabel=f"{base_asset}", savefig=f"charts/{symbol}_{interval}.png", figscale=5,
+            addplot=mpf.make_addplot(df["marker"], scatter=True, color="blue", marker="o", markersize=50))
 
 
 def get_binance_client(fake=False, extra_params=None):
@@ -1345,7 +1386,9 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
         bar.update()
     logger.debug(client.asset_report)
     logger.debug(client.get_total_usdt())
-
+    for trade_asset in trade_assets:
+        symbol = f"{trade_asset}{base_asset}"
+        client.generate_order_chart(symbol, end_dt, interval, base_asset)
 
 def trade(base_asset, trade_assets, interval, investment_ratio):
     client = get_binance_client()
