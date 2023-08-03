@@ -1,5 +1,5 @@
-.idea/
 .venv/
-jarvis/.env
-jarvis/__pycache__/
-jarvis/backtest.log
+src/.env
+src/__pycache__/
+src/backtest.log
+/venv/
