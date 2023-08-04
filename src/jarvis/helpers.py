@@ -1,10 +1,15 @@
 import calendar
+import logging
+from functools import wraps
+
 from _decimal import Decimal
 from datetime import timedelta, datetime
 from typing import Generator
 
 from binance.helpers import interval_to_milliseconds
 from .types import Assets, Kline
+
+logger = logging.getLogger(__name__)
 
 
 def assets_to_str(assets: Assets, prefix="Current assets: "):
@@ -65,14 +70,14 @@ def ceil_dt(dt: datetime, delta: timedelta) -> datetime:
     return (datetime.min + (q + 0) * delta) if r else dt
 
 
-def floor_to_step(number: int, step: int) -> int:
+def floor_to_step(number: int | Decimal, step: int | Decimal) -> Decimal:
     """
     >>> floor_to_step(6, 5)
     5
     >>> floor_to_step(18, 5)
     15
     """
-    return int(number / step) * step
+    return Decimal(int(number / step) * step)
 
 
 def ts_to_dt(ts: int) -> datetime:
@@ -230,3 +235,55 @@ def klines_to_python(klines):
             attrs[key] = value
         results.append(Kline(**attrs))
     return results
+
+
+__fn_cache = {}
+
+import sys
+
+
+def get_size(obj, seen=None):
+    """Recursively finds size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj,
+                                                     (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
+
+
+def humanized_bytes(num, suffix="B"):
+    for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
+        if abs(num) < 1024.0:
+            return f"{num:3.1f}{unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f}Yi{suffix}"
+
+# TODO: Make this a package.
+def from_cache(fn, *args, **kwargs):
+    key = id(fn), args, frozenset(kwargs.items())
+    try:
+        return __fn_cache[key]
+    except KeyError:
+        result = fn(*args, **kwargs)
+        __fn_cache[key] = result
+        logger.info('Cache size: ', humanized_bytes(get_size(__fn_cache)))
+        return result
+
+
+def cached(fn):
+    def inner(*args, **kwargs):
+        return from_cache(fn, *args, **kwargs)
+    return inner

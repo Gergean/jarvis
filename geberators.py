@@ -283,11 +283,7 @@ class ActionGenerator:
         """Needed by cache library to create cache key."""
         return "ActionGenerator"
 
-    @ring.lru()
     def get_symbol_filter(self, symbol, filter_type):
-        """
-        TODO: Doctests.
-        """
         filters = self.client.get_symbol_info(symbol)["filters"]
         for _filter in filters:
             if _filter["filterType"] == filter_type:

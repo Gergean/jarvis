@@ -32,3 +32,7 @@ class Signal:
     klines: list[Kline]
     reason: str
 
+class Action:
+    kind: ActionType
+    klines: list[Kline]
+    reason: str

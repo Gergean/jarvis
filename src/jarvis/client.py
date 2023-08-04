@@ -23,11 +23,11 @@ from .types import Assets
 logger = logging.getLogger(__name__)
 
 
-def binance_api_exception_on_missing_params(*required_params):
+def required_kwargs(*required_params):
     """
     >>> def fun(a=None, b=None):
     ...     print('OK')
-    >>> fun = binance_api_exception_on_missing_params('b')(fun)
+    >>> fun = required_kwargs('b')(fun)
     >>> fun(a=True)
     Traceback (most recent call last):
         ...
@@ -327,7 +327,7 @@ class FakeClient:
     def get_exchange_info(self):
         return self.client.get_exchange_info()
 
-    @binance_api_exception_on_missing_params("symbol", "interval")
+    @required_kwargs("symbol", "interval")
     def get_klines(self, **params):
         return get_klines_from_day_files(self.client, params["symbol"],
                                          params["interval"],
@@ -335,7 +335,7 @@ class FakeClient:
                                          end_ts=params.get("endTime"),
                                          limit=params.get("limit"), )
 
-    @binance_api_exception_on_missing_params("symbol")
+    @required_kwargs("symbol")
     def get_avg_price(self, interval=KLINE_INTERVAL_1MINUTE, **params):
         """
         Get average price by using latest 5minute kline.
@@ -386,7 +386,6 @@ class FakeClient:
         return {"asset": asset, "free": dc_to_str(Decimal(balance)),
                 "locked": dc_to_str(Decimal(0)), }
 
-    @ring.lru()
     def get_symbol_info(self, symbol):
         """
         TODO:
@@ -407,7 +406,7 @@ class FakeClient:
         """
         return self.client.get_symbol_info(symbol)
 
-    @binance_api_exception_on_missing_params("symbol", "side", "type")
+    @required_kwargs("symbol", "side", "type")
     def create_order(self, **params):
         """
 
