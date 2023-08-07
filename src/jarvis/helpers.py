@@ -287,3 +287,12 @@ def cached(fn):
     def inner(*args, **kwargs):
         return from_cache(fn, *args, **kwargs)
     return inner
+
+
+def range_parser(format, range_str):
+    range_start, range_end = range_str.split("..")
+    interval_type = format[-1] # m, h, d
+    assert range_start[-1] == range_end[-1] == interval_type, "wrong range"
+    range_start_value = int(range_start[:-1])
+    range_end_value = int(range_end[:-1])
+    return [f"{x}{interval_type}" for x in range(range_start_value, range_end_value + 1)]
