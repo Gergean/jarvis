@@ -42,7 +42,7 @@ if SENTRY_DSN is not None:
 
 BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
 BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
-
+DEBUG = os.getenv("DEBUG") == "True"
 
 COMMISSION_RATIO = Decimal(0.001)
 INVESTMENT_RATIO = Decimal(0.2)
@@ -1409,8 +1409,10 @@ def trade(base_asset, trade_assets, interval, investment_ratio):
             action_generator.get_action(dt, symbol, interval)
 
         if action not in (ActionType.BUY, ActionType.SELL):
-            logger.info('Decided to %s for %s, Reason: %s',
-                        action.value, trade_asset, reason)
+            message = f'Decided to {action.value} for {trade_asset}, Reason: {reason}'
+            logger.info(message)
+            if DEBUG:
+                notify(message)
             continue
 
         order_side = SIDE_BUY if action == ActionType.BUY else \
