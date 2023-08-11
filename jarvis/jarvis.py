@@ -42,7 +42,7 @@ if SENTRY_DSN is not None:
 
 BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
 BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
-DEBUG = os.getenv("DEBUG") == "True"
+DEBUG = os.getenv('DEBUG')
 
 COMMISSION_RATIO = Decimal(0.001)
 INVESTMENT_RATIO = Decimal(0.2)
@@ -1568,6 +1568,7 @@ if __name__ == '__main__':
 
     BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
     BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
+    DEBUG = os.getenv('DEBUG') == 'True'
 
     if kwargs.subparser == 'doctest':
         doctest.testmod(verbose=kwargs.verbose)
