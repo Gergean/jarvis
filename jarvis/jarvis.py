@@ -1391,7 +1391,9 @@ def backtest(base_asset, starting_amount, trade_assets, interval, start_dt,
         client.generate_order_chart(symbol, end_dt, interval, base_asset)
 
 def trade(base_asset, trade_assets, interval, investment_ratio):
+    fake_client = get_binance_client(fake=True)
     client = get_binance_client()
+    client.get_klines = fake_client.get_klines
     action_generator = AllInActionGenerator(
         client,
         signal_generators={
