@@ -580,6 +580,10 @@ class SuperTrendSignalGenerator(SignalGenerator):
         if klines:
             klines.pop(-1) ## current kline not closed
 
+        file_path = get_day_file_path(symbol, interval, end_dt)
+        os.remove(file_path)
+        load_day_file.delete(symbol, interval, end_dt, file_path)
+
         ind = supertrend(
             Series(x["high"] for x in klines),
             Series(x["low"] for x in klines),
@@ -627,6 +631,9 @@ class VWMASignalGenerator(SignalGenerator):
         klines = klines_to_python(klines)
         if klines:
             klines.pop(-1) ## current kline not closed
+        file_path = get_day_file_path(symbol, interval, end_dt)
+        os.remove(file_path)
+        load_day_file.delete(symbol, interval, end_dt, file_path)
 
         ohlc4 = Series((x['close'] + x['open'] + x['high'] + x['low']) / 4 for x in klines)
 
@@ -1289,9 +1296,17 @@ quantity=1, type=ORDER_TYPE_MARKET)
             endTime=datetime_to_timestamp(end_dt))
 
         klines = klines_to_python(klines)
+        if klines:
+            klines.pop(-1) ## current kline not closed
+
+        file_path = get_day_file_path(symbol, interval, end_dt)
+        os.remove(file_path)
+        load_day_file.delete(symbol, interval, end_dt, file_path)
+        
         df = pd.DataFrame(klines)
         df.set_index("open_time", inplace=True)
-        
+        if not self.order_history[symbol]:
+            return
         order_df = pd.DataFrame(self.order_history[symbol])
         order_df.set_index("open_time", inplace=True)
 
@@ -1397,8 +1412,8 @@ def trade(base_asset, trade_assets, interval, investment_ratio):
     action_generator = AllInActionGenerator(
         client,
         signal_generators={
-            'Supertrend Signal':
-                SuperTrendSignalGenerator(client)
+            'VWMA':
+                VWMASignalGenerator(client)
         },
         investment_multiplier=investment_ratio
     )
