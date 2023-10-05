@@ -876,8 +876,8 @@ class AllInActionGenerator(ActionGenerator):
                        'I would sell but there are not enough ' \
                        f'{base_asset} in wallet (' + \
                        decimal_as_str(base_asset_quantity) + ') (MIN_NOTIONAL)'
-            
-            self.bought_assets.remove(symbol)
+            if symbol in self.bought_assets:
+                self.bought_assets.remove(symbol)
             if len(self.bought_assets) == 0:
                 self.quote_asset_per_quantity = 0
 
