@@ -6,6 +6,7 @@ import doctest
 import errno
 import logging
 import os
+import json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -14,7 +15,8 @@ from functools import wraps
 from logging.handlers import RotatingFileHandler
 from os import makedirs
 from os.path import dirname, exists, isfile, join
-
+from dataclasses import dataclass
+from pathlib import Path
 import enlighten
 import requests
 import ring
@@ -43,6 +45,7 @@ if SENTRY_DSN is not None:
 BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
 BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
 DEBUG = os.getenv('DEBUG')
+POSITIONS_FILE = ""
 
 COMMISSION_RATIO = Decimal(0.001)
 INVESTMENT_RATIO = Decimal(0.2)
@@ -808,14 +811,28 @@ class ActionGenerator:
             "returns Action, Quantity, Quote Asset Quantity and Reason"
         )
 
+@dataclass
+class Position:
+    symbol: str
+    spent: Decimal
+    amount: Decimal
 
 class AllInActionGenerator(ActionGenerator):
+    def set_positions(self):
+        if POSITIONS_FILE.stat().st_size != 0:
+            with open(POSITIONS_FILE, "r") as f:
+                data = json.load(f)
+            self.positions = [Position(**pos) for pos in data]
+
+    def save_positions(self):
+        with open(POSITIONS_FILE, "w") as f:
+            json.dump(self.positions, f)
+
     def __init__(self, client, signal_generators=None,
                  investment_multiplier=1):
         super().__init__(client, signal_generators=signal_generators)
         self.investment_multiplier = investment_multiplier
-        self.quote_asset_per_quantity = 0
-        self.bought_assets = set()
+        self.positions = []
 
     def get_action(self, dt, symbol, interval):
         symbol_info = self.client.get_symbol_info(symbol)
@@ -876,19 +893,16 @@ class AllInActionGenerator(ActionGenerator):
                        'I would sell but there are not enough ' \
                        f'{base_asset} in wallet (' + \
                        decimal_as_str(base_asset_quantity) + ') (MIN_NOTIONAL)'
-            if symbol in self.bought_assets:
-                self.bought_assets.remove(symbol)
-            if len(self.bought_assets) == 0:
-                self.quote_asset_per_quantity = 0
+            self.positions = [pos for pos in self.positions if pos.symbol != symbol]
 
         if most_common_signal == ActionType.BUY:
-            if self.quote_asset_per_quantity == 0:
+            if not self.positions:
                 tradable_asset_quantity = Decimal(
                     self.client.get_asset_balance(
                         asset=quote_asset)['free']) * \
                                     self.investment_multiplier
             else:
-                tradable_asset_quantity = self.quote_asset_per_quantity
+                tradable_asset_quantity = self.positions[0].spent
 
             quote_asset_quantity = \
                 int(tradable_asset_quantity / step_size) * step_size
@@ -913,9 +927,13 @@ class AllInActionGenerator(ActionGenerator):
                        decimal_as_str(
                            quote_asset_quantity) + ') (MIN_NOTIONAL)'
 
-            if len(self.bought_assets) == 0:
-                self.quote_asset_per_quantity = tradable_asset_quantity
-            self.bought_assets.add(symbol)
+            self.positions.append(
+                Position(
+                    symbol=symbol,
+                    spent=tradable_asset_quantity,
+                    amount=quote_asset_quantity
+                )
+            )
 
         return most_common_signal, base_asset_quantity, quote_asset_quantity, \
                f'All signals that I have says {most_common_signal.value}'
@@ -1417,6 +1435,7 @@ def trade(base_asset, trade_assets, interval, investment_ratio):
         },
         investment_multiplier=investment_ratio
     )
+    action_generator.set_positions()
     dt = datetime.utcnow()
     grouped_actions = {ActionType.BUY: "", ActionType.SELL: ""}
 
@@ -1486,6 +1505,7 @@ def trade(base_asset, trade_assets, interval, investment_ratio):
                    f"(TWT not Included)"
         notify(message)
 
+    action_generator.save_positions()
 
 if __name__ == '__main__':
 
@@ -1586,6 +1606,8 @@ if __name__ == '__main__':
     BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
     BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
     DEBUG = os.getenv('DEBUG') == 'True'
+    POSITIONS_FILE = Path(os.getenv('POSITIONS_FILE'))
+    POSITIONS_FILE.touch(exist_ok=True)
 
     if kwargs.subparser == 'doctest':
         doctest.testmod(verbose=kwargs.verbose)
