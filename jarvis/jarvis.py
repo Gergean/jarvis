@@ -6,7 +6,7 @@ import doctest
 import errno
 import logging
 import os
-import json
+import simplejson as json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -15,7 +15,7 @@ from functools import wraps
 from logging.handlers import RotatingFileHandler
 from os import makedirs
 from os.path import dirname, exists, isfile, join
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
 import enlighten
 import requests
@@ -826,7 +826,7 @@ class AllInActionGenerator(ActionGenerator):
 
     def save_positions(self):
         with open(POSITIONS_FILE, "w") as f:
-            json.dump(self.positions, f)
+            json.dump([asdict(pos) for pos in self.positions], f)
 
     def __init__(self, client, signal_generators=None,
                  investment_multiplier=1):
