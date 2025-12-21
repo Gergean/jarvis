@@ -29,11 +29,14 @@ from binance.helpers import interval_to_milliseconds
 from dotenv import load_dotenv
 from freezegun import freeze_time
 from pandas import Series, DataFrame
-from ta.trend import SMAIndicator
+from ta.trend import SMAIndicator, EMAIndicator
+from ta.momentum import RSIIndicator
+from ta.trend import MACD as MACDIndicator
 from pandas_ta.overlap.vwma import vwma
 from pandas_ta.overlap import supertrend
 import pandas as pd
 import mplfinance as mpf
+import random
 
 load_dotenv(verbose=True)
 
@@ -550,6 +553,653 @@ def klines_to_python(klines):
             result[key] = value
         results.append(result)
     return results
+
+
+# ============================================================================
+# GENETIC ALGORITHM TRADING SYSTEM
+# ============================================================================
+
+class Indicator:
+    """Base class for all technical indicators"""
+
+    def calculate(self, klines):
+        """
+        Calculate indicator value from klines data
+        Returns: float (single value)
+        """
+        raise NotImplementedError
+
+    def mutate(self):
+        """
+        Return a mutated copy of this indicator
+        Mutation: slightly adjust parameters (±10-20%)
+        Returns: new Indicator instance
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def random(cls):
+        """
+        Class method: create random instance with random parameters
+        Returns: new Indicator instance
+        """
+        raise NotImplementedError
+
+
+class RSI(Indicator):
+    def __init__(self, period=14):
+        self.period = period
+
+    def calculate(self, klines):
+        if len(klines) < self.period:
+            return 50.0  # Neutral value
+        closes = Series([k['close'] for k in klines])
+        rsi = RSIIndicator(close=closes, window=self.period).rsi()
+        return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
+
+    def mutate(self):
+        new_period = int(self.period * random.uniform(0.8, 1.2))
+        new_period = max(5, min(30, new_period))
+        return RSI(period=new_period)
+
+    @classmethod
+    def random(cls):
+        return cls(period=random.randint(10, 20))
+
+    def __repr__(self):
+        return f"RSI({self.period})"
+
+
+class SMA(Indicator):
+    def __init__(self, period=20):
+        self.period = period
+
+    def calculate(self, klines):
+        if len(klines) < self.period:
+            return klines[-1]['close']
+        closes = Series([k['close'] for k in klines])
+        sma = SMAIndicator(close=closes, window=self.period).sma_indicator()
+        return float(sma.iloc[-1]) if not pd.isna(sma.iloc[-1]) else klines[-1]['close']
+
+    def mutate(self):
+        new_period = int(self.period * random.uniform(0.8, 1.2))
+        new_period = max(5, min(100, new_period))
+        return SMA(period=new_period)
+
+    @classmethod
+    def random(cls):
+        return cls(period=random.randint(10, 50))
+
+    def __repr__(self):
+        return f"SMA({self.period})"
+
+
+class EMA(Indicator):
+    def __init__(self, period=20):
+        self.period = period
+
+    def calculate(self, klines):
+        if len(klines) < self.period:
+            return klines[-1]['close']
+        closes = Series([k['close'] for k in klines])
+        ema = EMAIndicator(close=closes, window=self.period).ema_indicator()
+        return float(ema.iloc[-1]) if not pd.isna(ema.iloc[-1]) else klines[-1]['close']
+
+    def mutate(self):
+        new_period = int(self.period * random.uniform(0.8, 1.2))
+        new_period = max(5, min(100, new_period))
+        return EMA(period=new_period)
+
+    @classmethod
+    def random(cls):
+        return cls(period=random.randint(10, 50))
+
+    def __repr__(self):
+        return f"EMA({self.period})"
+
+
+class WMA(Indicator):
+    def __init__(self, period=20):
+        self.period = period
+
+    def calculate(self, klines):
+        if len(klines) < self.period:
+            return klines[-1]['close']
+        closes = [k['close'] for k in klines[-self.period:]]
+        weights = list(range(1, self.period + 1))
+        wma = sum(c * w for c, w in zip(closes, weights)) / sum(weights)
+        return float(wma)
+
+    def mutate(self):
+        new_period = int(self.period * random.uniform(0.8, 1.2))
+        new_period = max(5, min(100, new_period))
+        return WMA(period=new_period)
+
+    @classmethod
+    def random(cls):
+        return cls(period=random.randint(10, 50))
+
+    def __repr__(self):
+        return f"WMA({self.period})"
+
+
+class MACD(Indicator):
+    def __init__(self, fast=12, slow=26, signal=9):
+        self.fast = fast
+        self.slow = slow
+        self.signal = signal
+
+    def calculate(self, klines):
+        min_required = max(self.fast, self.slow, self.signal)
+        if len(klines) < min_required:
+            return 0.0
+        closes = Series([k['close'] for k in klines])
+        macd_indicator = MACDIndicator(
+            close=closes,
+            window_slow=self.slow,
+            window_fast=self.fast,
+            window_sign=self.signal
+        )
+        macd_line = macd_indicator.macd()
+        return float(macd_line.iloc[-1]) if not pd.isna(macd_line.iloc[-1]) else 0.0
+
+    def mutate(self):
+        choice = random.choice(['fast', 'slow', 'signal'])
+        if choice == 'fast':
+            new_fast = int(self.fast * random.uniform(0.8, 1.2))
+            return MACD(fast=max(5, min(20, new_fast)), slow=self.slow, signal=self.signal)
+        elif choice == 'slow':
+            new_slow = int(self.slow * random.uniform(0.8, 1.2))
+            return MACD(fast=self.fast, slow=max(15, min(40, new_slow)), signal=self.signal)
+        else:
+            new_signal = int(self.signal * random.uniform(0.8, 1.2))
+            return MACD(fast=self.fast, slow=self.slow, signal=max(5, min(15, new_signal)))
+
+    @classmethod
+    def random(cls):
+        return cls(
+            fast=random.randint(8, 15),
+            slow=random.randint(20, 35),
+            signal=random.randint(7, 12)
+        )
+
+    def __repr__(self):
+        return f"MACD({self.fast},{self.slow},{self.signal})"
+
+
+class PRICE(Indicator):
+    """Current price - no parameters"""
+    def __init__(self):
+        pass
+
+    def calculate(self, klines):
+        return klines[-1]['close']
+
+    def mutate(self):
+        return PRICE()
+
+    @classmethod
+    def random(cls):
+        return cls()
+
+    def __repr__(self):
+        return "PRICE"
+
+
+class VOLUME(Indicator):
+    """Current volume - no parameters"""
+    def __init__(self):
+        pass
+
+    def calculate(self, klines):
+        return klines[-1]['volume']
+
+    def mutate(self):
+        return VOLUME()
+
+    @classmethod
+    def random(cls):
+        return cls()
+
+    def __repr__(self):
+        return "VOLUME"
+
+
+class Rule:
+    def __init__(self, indicator, operator, threshold, weight):
+        """
+        Args:
+            indicator: Indicator instance (RSI, SMA, etc.)
+            operator: str ('>', '<', '>=', '<=')
+            threshold: float (value to compare against)
+            weight: float (-1.0 to +1.0, positive=BUY, negative=SELL)
+        """
+        self.indicator = indicator
+        self.operator = operator
+        self.threshold = threshold
+        self.weight = weight
+
+    def evaluate(self, klines):
+        """
+        Evaluate this rule against klines data
+        Returns: weight if triggered, 0 otherwise
+        """
+        value = self.indicator.calculate(klines)
+
+        triggered = False
+        if self.operator == '>':
+            triggered = value > self.threshold
+        elif self.operator == '<':
+            triggered = value < self.threshold
+        elif self.operator == '>=':
+            triggered = value >= self.threshold
+        elif self.operator == '<=':
+            triggered = value <= self.threshold
+
+        return self.weight if triggered else 0
+
+    def mutate(self):
+        """
+        Mutate this rule - returns new Rule instance
+        Randomly mutate one component
+        """
+        choice = random.random()
+
+        if choice < 0.1:
+            # Mutate indicator
+            return Rule(
+                self.indicator.mutate(),
+                self.operator,
+                self.threshold,
+                self.weight
+            )
+        elif choice < 0.2:
+            # Flip operator
+            new_op = {'<': '>', '>': '<', '<=': '>=', '>=': '<='}[self.operator]
+            return Rule(
+                self.indicator,
+                new_op,
+                self.threshold,
+                self.weight
+            )
+        elif choice < 0.6:
+            # Mutate threshold
+            new_threshold = self.threshold * random.uniform(0.8, 1.2)
+            return Rule(
+                self.indicator,
+                self.operator,
+                new_threshold,
+                self.weight
+            )
+        else:
+            # Mutate weight
+            new_weight = self.weight + random.uniform(-0.2, 0.2)
+            new_weight = max(-1.0, min(1.0, new_weight))
+            return Rule(
+                self.indicator,
+                self.operator,
+                self.threshold,
+                new_weight
+            )
+
+    @classmethod
+    def random(cls, klines):
+        """
+        Create random rule
+        Args:
+            klines: historical data (needed to set reasonable threshold)
+        """
+        # Random indicator
+        indicator_class = random.choice([RSI, SMA, EMA, WMA, MACD, PRICE, VOLUME])
+        indicator = indicator_class.random()
+
+        # Random operator
+        operator = random.choice(['>', '<', '>=', '<='])
+
+        # Random threshold (based on current values)
+        current_value = indicator.calculate(klines)
+        threshold = current_value * random.uniform(0.8, 1.2)
+
+        # Random weight
+        weight = random.uniform(-1.0, 1.0)
+
+        return cls(indicator, operator, threshold, weight)
+
+    def __repr__(self):
+        return f"Rule({self.indicator} {self.operator} {self.threshold:.2f}, w={self.weight:.2f})"
+
+
+class Individual:
+    def __init__(self, rules):
+        """
+        Args:
+            rules: list of Rule instances
+        """
+        self.rules = rules
+        self.fitness = None
+
+    def get_signal(self, klines):
+        """
+        Evaluate all rules and return trading signal
+        Returns: ActionType.BUY, ActionType.SELL, or ActionType.STAY
+        """
+        score = sum(rule.evaluate(klines) for rule in self.rules)
+
+        if score > 0.5:
+            return ActionType.BUY
+        elif score < -0.5:
+            return ActionType.SELL
+        else:
+            return ActionType.STAY
+
+    @classmethod
+    def random(cls, klines, num_rules=10):
+        """
+        Create random individual
+        Args:
+            klines: historical data
+            num_rules: number of rules (default 10)
+        """
+        rules = [Rule.random(klines) for _ in range(num_rules)]
+        return cls(rules)
+
+    def __repr__(self):
+        return f"Individual({len(self.rules)} rules, fitness={self.fitness})"
+
+
+def mutate_individual(individual, klines):
+    """
+    Mutate individual - returns new Individual
+
+    Mutation types (equal probability):
+    1. Mutate random rule (40%)
+    2. Add new random rule (20%)
+    3. Remove random rule (20%)
+    4. Replace random rule (20%)
+    """
+    choice = random.random()
+    new_rules = individual.rules.copy()
+
+    if choice < 0.4 and new_rules:
+        # Mutate random rule
+        idx = random.randint(0, len(new_rules) - 1)
+        new_rules[idx] = new_rules[idx].mutate()
+
+    elif choice < 0.6:
+        # Add new rule
+        new_rule = Rule.random(klines)
+        new_rules.append(new_rule)
+
+    elif choice < 0.8 and len(new_rules) > 3:
+        # Remove random rule (keep at least 3 rules)
+        idx = random.randint(0, len(new_rules) - 1)
+        new_rules.pop(idx)
+
+    else:
+        # Replace random rule
+        if new_rules:
+            idx = random.randint(0, len(new_rules) - 1)
+            new_rules[idx] = Rule.random(klines)
+
+    return Individual(new_rules)
+
+
+def crossover(parent1, parent2):
+    """
+    Single-point crossover
+    Returns: two children
+    """
+    # Find crossover point
+    min_len = min(len(parent1.rules), len(parent2.rules))
+    if min_len < 2:
+        return parent1, parent2
+
+    point = random.randint(1, min_len - 1)
+
+    # Create children
+    child1_rules = parent1.rules[:point] + parent2.rules[point:]
+    child2_rules = parent2.rules[:point] + parent1.rules[point:]
+
+    return Individual(child1_rules), Individual(child2_rules)
+
+
+def tournament_selection(population, k=3):
+    """
+    Select best individual from k random individuals
+    Args:
+        population: list of Individual instances
+        k: tournament size
+    Returns: selected Individual
+    """
+    tournament = random.sample(population, min(k, len(population)))
+    return max(tournament, key=lambda ind: ind.fitness if ind.fitness is not None else float('-inf'))
+
+
+class GeneticSignalGenerator(SignalGenerator):
+    """Signal generator that uses a genetic algorithm individual"""
+
+    def __init__(self, client, individual):
+        self.client = client
+        self.individual = individual
+
+    def get_signal(self, dt, symbol, interval):
+        """Get signal from the genetic individual"""
+        needed_num_of_candles = 100  # Get enough history for indicators
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        start_dt = end_dt - interval_as_timedelta * needed_num_of_candles
+
+        klines = self.client.get_klines(
+            symbol=symbol,
+            interval=interval,
+            startTime=datetime_to_timestamp(start_dt),
+            endTime=datetime_to_timestamp(end_dt)
+        )
+
+        klines = klines_to_python(klines)
+        if klines:
+            klines.pop(-1)  # Current kline not closed
+
+        if not klines:
+            return ActionType.STAY, klines, 'No klines available'
+
+        signal = self.individual.get_signal(klines)
+        return signal, klines, f'Genetic algorithm decision: {signal.value}'
+
+
+def evaluate_individual(individual, base_asset, trade_assets, interval, start_dt, end_dt):
+    """
+    Backtest individual and return profit
+
+    Args:
+        individual: Individual instance
+        base_asset: base asset (e.g., 'USDT')
+        trade_assets: list of trade assets
+        interval: interval string
+        start_dt: start datetime
+        end_dt: end datetime
+
+    Returns:
+        float: final profit in base asset
+    """
+    # Create fake client for backtest
+    client = get_binance_client(fake=True, extra_params={
+        'assets': {base_asset: Decimal(100)},
+        'commission_ratio': Decimal(0.001)
+    })
+
+    # Create signal generator from individual
+    signal_generator = GeneticSignalGenerator(client, individual)
+
+    # Create action generator
+    action_generator = AllInActionGenerator(
+        client,
+        signal_generators={'genetic': signal_generator},
+        investment_multiplier=1
+    )
+
+    # Run backtest
+    interval_as_timedelta = interval_to_timedelta(interval)
+
+    for dt in dt_range(start_dt, end_dt, interval_as_timedelta):
+        for trade_asset in trade_assets:
+            symbol = f"{trade_asset}{base_asset}"
+
+            try:
+                action, base_qty, quote_qty, reason = action_generator.get_action(dt, symbol, interval)
+
+                if action in (ActionType.BUY, ActionType.SELL):
+                    order_side = SIDE_BUY if action == ActionType.BUY else SIDE_SELL
+
+                    params = {
+                        'symbol': symbol,
+                        'side': order_side,
+                        'type': ORDER_TYPE_MARKET,
+                    }
+
+                    if quote_qty:
+                        params['quoteOrderQty'] = quote_qty
+
+                    if base_qty:
+                        params['quantity'] = base_qty
+
+                    try:
+                        client.create_order(**params)
+                    except Exception as e:
+                        logger.debug(f'Order failed: {e}')
+            except Exception as e:
+                logger.debug(f'Error evaluating individual: {e}')
+
+    # Return final worth
+    return float(client.get_total_usdt())
+
+
+def evolve(base_asset, trade_assets, interval, start_dt, end_dt,
+           population_size=100, generations=50):
+    """
+    Main evolution loop
+
+    Args:
+        base_asset: 'USDT'
+        trade_assets: ['BTC', 'ETH', ...]
+        interval: '1h'
+        start_dt: datetime
+        end_dt: datetime
+        population_size: 100
+        generations: 50
+
+    Returns:
+        best_individual: Individual with highest fitness
+    """
+    logger.info('Starting genetic algorithm evolution')
+    logger.info(f'Population size: {population_size}, Generations: {generations}')
+    logger.info(f'Trading {trade_assets} against {base_asset}')
+    logger.info(f'Period: {start_dt} to {end_dt}, Interval: {interval}')
+
+    # Get historical data for threshold calculations
+    client = get_binance_client(fake=True)
+    symbol = f"{trade_assets[0]}{base_asset}"
+
+    # Get sample klines for creating random rules
+    sample_klines = client.get_klines(
+        symbol=symbol,
+        interval=interval,
+        startTime=datetime_to_timestamp(start_dt),
+        endTime=datetime_to_timestamp(start_dt + interval_to_timedelta(interval) * 100),
+        limit=100
+    )
+    sample_klines = klines_to_python(sample_klines)
+
+    logger.info('Initializing population...')
+    # Initialize population
+    population = [Individual.random(sample_klines, num_rules=random.randint(5, 15))
+                  for _ in range(population_size)]
+
+    # Evaluate initial population
+    logger.info('Evaluating initial population...')
+    bar_manager = enlighten.get_manager()
+    bar = bar_manager.counter(total=population_size, desc='Initial Evaluation', unit='individuals')
+
+    for individual in population:
+        individual.fitness = evaluate_individual(
+            individual, base_asset, trade_assets, interval, start_dt, end_dt
+        )
+        bar.update()
+    bar.close()
+
+    best_ever = max(population, key=lambda ind: ind.fitness)
+    logger.info(f'Initial best fitness: ${best_ever.fitness:.2f}')
+
+    # Evolution loop
+    for gen in range(generations):
+        logger.info(f'Generation {gen+1}/{generations}')
+
+        # Create new generation
+        new_population = []
+
+        # Elitism: keep top 10%
+        elite_size = population_size // 10
+        elite = sorted(population, key=lambda ind: ind.fitness, reverse=True)[:elite_size]
+        new_population.extend(elite)
+        logger.debug(f'Kept {elite_size} elite individuals')
+
+        # Fill rest with crossover + mutation
+        while len(new_population) < population_size:
+            # Selection
+            parent1 = tournament_selection(population)
+            parent2 = tournament_selection(population)
+
+            # Crossover (50% chance)
+            if random.random() < 0.5:
+                child1, child2 = crossover(parent1, parent2)
+            else:
+                child1, child2 = Individual(parent1.rules.copy()), Individual(parent2.rules.copy())
+
+            # Mutation (20% chance per child)
+            if random.random() < 0.2:
+                child1 = mutate_individual(child1, sample_klines)
+            if random.random() < 0.2:
+                child2 = mutate_individual(child2, sample_klines)
+
+            new_population.extend([child1, child2])
+
+        # Trim to population size
+        population = new_population[:population_size]
+
+        # Evaluate new generation
+        logger.info('Evaluating new generation...')
+        bar = bar_manager.counter(total=population_size, desc=f'Gen {gen+1}', unit='individuals')
+
+        for individual in population:
+            if individual.fitness is None:
+                individual.fitness = evaluate_individual(
+                    individual, base_asset, trade_assets, interval, start_dt, end_dt
+                )
+            bar.update()
+        bar.close()
+
+        # Track best
+        gen_best = max(population, key=lambda ind: ind.fitness)
+        if gen_best.fitness > best_ever.fitness:
+            best_ever = gen_best
+            logger.info(f'*** NEW BEST: ${best_ever.fitness:.2f} ***')
+
+        # Log progress
+        avg_fitness = sum(ind.fitness for ind in population) / len(population)
+        logger.info(f'Best: ${gen_best.fitness:.2f}, Avg: ${avg_fitness:.2f}, All-time best: ${best_ever.fitness:.2f}')
+
+    bar_manager.stop()
+
+    logger.info('Evolution complete!')
+    logger.info(f'Best individual fitness: ${best_ever.fitness:.2f}')
+    logger.info(f'Best individual has {len(best_ever.rules)} rules')
+
+    return best_ever
+
+
+# ============================================================================
+# END GENETIC ALGORITHM TRADING SYSTEM
+# ============================================================================
 
 
 class SignalGenerator:
@@ -1523,6 +2173,7 @@ if __name__ == '__main__':
     backtest_parser = subparsers.add_parser('backtest')
     doctest_parser = subparsers.add_parser('doctest')
     trade_parser = subparsers.add_parser('trade')
+    evolve_parser = subparsers.add_parser('evolve')
 
     dt_type = lambda s: datetime.strptime(s, '%Y-%m-%dT%H:%M:%S')
 
@@ -1594,6 +2245,41 @@ if __name__ == '__main__':
              % decimal_as_str(INVESTMENT_RATIO)
     )
 
+    # Evolve parser arguments
+    evolve_parser.add_argument(
+        '-ba', dest="base_asset", metavar="BASE_ASSET", default='USDT',
+        type=str, help='The base asset that you want to trade. '
+                       'Default: %(default)s')
+
+    evolve_parser.add_argument(
+        '-ta', dest="trade_assets", nargs="+", metavar="TRADE_ASSET",
+        help="List of assets that you want to trade against base asset.",
+        type=str, required=True)
+
+    evolve_parser.add_argument(
+        '-st', dest="start_dt", default="2020-01-01T00:00:00", type=dt_type,
+        metavar="START_TIME", help='The time that evolution will start. '
+                                   'Default: %(default)s.')
+
+    evolve_parser.add_argument(
+        '-et', dest="end_dt", default="2020-12-01T00:00:00", type=dt_type,
+        metavar="END_TIME", help='The time that evolution will end. '
+                                 'Default: %(default)s.')
+
+    evolve_parser.add_argument(
+        '-i', dest="interval", default="1h", metavar="INTERVAL",
+        type=str, help='Interval of klines to check.')
+
+    evolve_parser.add_argument(
+        '-ps', dest="population_size", default=100, type=int,
+        metavar="POPULATION_SIZE",
+        help='Population size for genetic algorithm. Default: %(default)s')
+
+    evolve_parser.add_argument(
+        '-gen', dest="generations", default=50, type=int,
+        metavar="GENERATIONS",
+        help='Number of generations to evolve. Default: %(default)s')
+
     kwargs = parser.parse_args()
 
     if kwargs.env_path:
@@ -1619,3 +2305,23 @@ if __name__ == '__main__':
     elif kwargs.subparser == 'trade':
         trade(kwargs.base_asset, kwargs.trade_assets,
               kwargs.interval, kwargs.investment_ratio)
+    elif kwargs.subparser == 'evolve':
+        best_individual = evolve(
+            kwargs.base_asset,
+            kwargs.trade_assets,
+            kwargs.interval,
+            kwargs.start_dt,
+            kwargs.end_dt,
+            kwargs.population_size,
+            kwargs.generations
+        )
+        logger.info('='*80)
+        logger.info('EVOLUTION COMPLETE!')
+        logger.info(f'Best fitness: ${best_individual.fitness:.2f}')
+        logger.info(f'Number of rules: {len(best_individual.rules)}')
+        logger.info('='*80)
+        logger.info('Best individual rules:')
+        for i, rule in enumerate(best_individual.rules, 1):
+            logger.info(f'  {i}. {rule}')
+        logger.info('='*80)
+        print('Output written to backtest.log')
