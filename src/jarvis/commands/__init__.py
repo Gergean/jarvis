@@ -1,6 +1,8 @@
 """Commands for the Jarvis trading system."""
 
-from jarvis.commands.backtest import backtest
+from jarvis.commands.download import download
+from jarvis.commands.test import test
 from jarvis.commands.trade import trade
+from jarvis.commands.train import train
 
-__all__ = ["backtest", "trade"]
+__all__ = ["download", "test", "trade", "train"]

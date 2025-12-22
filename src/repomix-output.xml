@@ -1,0 +1,4785 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.claude/
+  settings.local.json
+jarvis/
+  actions/
+    __init__.py
+    allin.py
+    base.py
+  commands/
+    __init__.py
+    backtest.py
+    download.py
+    evolve.py
+    trade.py
+    train.py
+  ga/
+    __init__.py
+    indicators.py
+    individual.py
+    population.py
+    portfolio.py
+    rule.py
+    strategy.py
+  signals/
+    __init__.py
+    base.py
+    consecutive.py
+    sma.py
+    supertrend.py
+    vwma.py
+  __init__.py
+  client.py
+  logging.py
+  models.py
+  settings.py
+  utils.py
+strategies/
+  BNBUSDT.json
+  ETHUSDT.json
+  SOLUSDT.json
+  XRPUSDT.json
+.env.example
+jarvis.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".claude/settings.local.json">
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(uv run python:*)",
+      "Bash(time uv run:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(time JARVIS_NO_PARALLEL=1 uv run python:*)",
+      "Bash(brew list:*)",
+      "Bash(cat:*)"
+    ]
+  }
+}
+</file>
+
+<file path="jarvis/actions/__init__.py">
+"""Action generators for the Jarvis trading system."""
+
+from jarvis.actions.allin import AllInActionGenerator
+from jarvis.actions.base import ActionGenerator
+
+__all__ = [
+    "ActionGenerator",
+    "AllInActionGenerator",
+]
+</file>
+
+<file path="jarvis/actions/allin.py">
+"""All-in action generator."""
+
+from collections import Counter
+from datetime import datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from jarvis.actions.base import ActionGenerator
+from jarvis.logging import logger
+from jarvis.models import ActionType
+from jarvis.signals import SignalGenerator
+from jarvis.utils import decimal_as_str, floor_to_step
+
+if TYPE_CHECKING:
+    from jarvis.client import CachedClient
+
+
+class AllInActionGenerator(ActionGenerator):
+    """Action generator that invests a percentage of available balance per trade."""
+
+    def __init__(
+        self,
+        client: "CachedClient",
+        signal_generators: dict[str, SignalGenerator] | None = None,
+        investment_multiplier: Decimal = Decimal(1),
+    ) -> None:
+        super().__init__(client, signal_generators=signal_generators)
+        self.investment_multiplier = investment_multiplier
+
+    def get_action(
+        self, dt: datetime, symbol: str, interval: str
+    ) -> tuple[ActionType, Decimal | None, Decimal | None, str]:
+        symbol_info = self.client.get_symbol_info(symbol)
+        base_asset = symbol_info["baseAsset"]
+        quote_asset = symbol_info["quoteAsset"]
+
+        signals = []
+        for name, generator in self.signal_generators.items():
+            signal, klines, reason = generator.get_signal(dt, symbol, interval)
+            logger.debug("%s returned %s on %s. Reason: %s", name, signal.value, dt, reason)
+            signals.append(signal)
+        most_common_signal = Counter(signals).most_common(1)[0][0]
+
+        base_asset_quantity = None
+        quote_asset_quantity = None
+        market_lot_info = self.get_symbol_filter(symbol, "MARKET_LOT_SIZE")
+        market_min_quantity = Decimal(market_lot_info["minQty"])
+
+        lot_info = self.get_symbol_filter(symbol, "LOT_SIZE")
+        min_quantity = Decimal(lot_info["minQty"])
+        step_size = Decimal(lot_info["stepSize"])
+
+        min_notional_info = self.get_symbol_filter(symbol, "NOTIONAL")
+        min_notional = Decimal(min_notional_info["minNotional"])
+
+        if most_common_signal == ActionType.SELL:
+            base_asset_quantity = Decimal(self.client.get_asset_balance(asset=base_asset)["free"])
+            base_asset_quantity = floor_to_step(base_asset_quantity, step_size)
+            avg_price = self.client.get_avg_price(symbol=symbol).get("price")
+
+            if avg_price is None:
+                return ActionType.ERR, None, None, "Average price problem"
+
+            base_asset_value = base_asset_quantity * Decimal(avg_price)
+
+            if base_asset_quantity <= market_min_quantity:
+                return (
+                    ActionType.STAY,
+                    None,
+                    None,
+                    "I would sell but there are not enough "
+                    f"{base_asset} in wallet (" + decimal_as_str(base_asset_quantity) + ") (MARKET_LOT_SIZE)",
+                )
+
+            if base_asset_quantity <= min_quantity:
+                return (
+                    ActionType.STAY,
+                    None,
+                    None,
+                    "I would sell but there are not enough "
+                    f"{base_asset} in wallet (" + decimal_as_str(base_asset_quantity) + ") (LOT_SIZE)",
+                )
+
+            if base_asset_value <= min_notional:
+                return (
+                    ActionType.STAY,
+                    None,
+                    None,
+                    "I would sell but there are not enough "
+                    f"{base_asset} in wallet (" + decimal_as_str(base_asset_quantity) + ") (MIN_NOTIONAL)",
+                )
+
+        if most_common_signal == ActionType.BUY:
+            tradable_asset_quantity = (
+                Decimal(self.client.get_asset_balance(asset=quote_asset)["free"]) * self.investment_multiplier
+            )
+
+            quote_asset_quantity = int(tradable_asset_quantity / step_size) * step_size
+
+            if quote_asset_quantity <= market_min_quantity:
+                return (
+                    ActionType.STAY,
+                    None,
+                    None,
+                    "I would buy but there are not enough "
+                    f"{quote_asset} in wallet (" + decimal_as_str(quote_asset_quantity) + ") (MARKET_LOT_SIZE)",
+                )
+
+            if quote_asset_quantity <= min_quantity:
+                return (
+                    ActionType.STAY,
+                    None,
+                    None,
+                    "I would buy but there are not enough "
+                    f"{quote_asset} in wallet (" + decimal_as_str(quote_asset_quantity) + ") (LOT_SIZE)",
+                )
+
+            if quote_asset_quantity <= min_notional:
+                return (
+                    ActionType.STAY,
+                    None,
+                    None,
+                    "I would buy but there are not enough "
+                    f"{quote_asset} in wallet (" + decimal_as_str(quote_asset_quantity) + ") (MIN_NOTIONAL)",
+                )
+
+        return (
+            most_common_signal,
+            base_asset_quantity,
+            quote_asset_quantity,
+            f"All signals that I have says {most_common_signal.value}",
+        )
+</file>
+
+<file path="jarvis/actions/base.py">
+"""Base action generator class."""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any
+
+import ring
+
+from jarvis.models import ActionType
+from jarvis.signals.base import SignalGenerator
+
+if TYPE_CHECKING:
+    from jarvis.client import CachedClient
+
+
+class ActionGenerator:
+    """Action generators responsible for generating decisions by using
+    registered SIGNAL_GENERATORS when its get_decision method is called.
+    """
+
+    def __init__(self, client: "CachedClient", signal_generators: dict[str, SignalGenerator] | None = None) -> None:
+        self.client = client
+        self.signal_generators: dict[str, SignalGenerator] = signal_generators or {}
+
+    def __str__(self) -> str:
+        """Needed by cache library to create cache key."""
+        return "ActionGenerator"
+
+    @ring.lru()  # type: ignore[untyped-decorator]
+    def get_symbol_filter(self, symbol: str, filter_type: str) -> dict[str, Any]:
+        """
+        TODO: Doctests.
+        """
+        filters: list[dict[str, Any]] = self.client.get_symbol_info(symbol)["filters"]
+        result: dict[str, Any] = {}
+        for _filter in filters:
+            result = _filter
+            if _filter["filterType"] == filter_type:
+                return result
+        return result
+
+    def get_action(
+        self, dt: datetime, symbol: str, interval: str
+    ) -> tuple[ActionType, Decimal | None, Decimal | None, str]:
+        raise NotImplementedError(
+            "DecisionGenerator classes must have get_decision method that "
+            "returns Action, Quantity, Quote Asset Quantity and Reason"
+        )
+</file>
+
+<file path="jarvis/commands/__init__.py">
+"""Commands for the Jarvis trading system."""
+
+from jarvis.commands.backtest import backtest
+from jarvis.commands.download import download
+from jarvis.commands.evolve import evolve
+from jarvis.commands.trade import trade
+from jarvis.commands.train import train
+
+__all__ = ["backtest", "download", "evolve", "trade", "train"]
+</file>
+
+<file path="jarvis/commands/backtest.py">
+"""Backtest command for the Jarvis trading system."""
+
+from datetime import datetime
+from decimal import Decimal
+
+import enlighten
+from binance.enums import ORDER_TYPE_MARKET, SIDE_BUY, SIDE_SELL
+from freezegun import freeze_time
+
+from jarvis.actions import AllInActionGenerator
+from jarvis.client import get_binance_client
+from jarvis.logging import logger
+from jarvis.models import ActionType
+from jarvis.signals import VWMASignalGenerator
+from jarvis.utils import dt_range, interval_to_timedelta, num_of_intervals
+
+
+def backtest(
+    base_asset: str,
+    starting_amount: Decimal,
+    trade_assets: list[str],
+    interval: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    commission_ratio: Decimal,
+    investment_ratio: Decimal,
+) -> None:
+    """Run backtest simulation on historical data."""
+    bar_manager = enlighten.get_manager()
+
+    client = get_binance_client(
+        fake=True, extra_params={"assets": {base_asset: starting_amount}, "commission_ratio": commission_ratio}
+    )
+    action_generator = AllInActionGenerator(
+        client,
+        signal_generators={
+            "VWMA": VWMASignalGenerator(client),
+        },
+        investment_multiplier=investment_ratio,
+    )
+    interval_as_timedelta = interval_to_timedelta(interval)
+
+    total_intervals = num_of_intervals(start_dt, end_dt, interval_as_timedelta)
+
+    bar = bar_manager.counter(total=total_intervals, desc="Trading", unit="Intervals")
+
+    for idx, dt in enumerate(dt_range(start_dt, end_dt, interval_as_timedelta)):
+        for idx2, trade_asset in enumerate(trade_assets):
+            with freeze_time(dt):
+                logger.debug("Datetime frozen to %s", dt)
+                symbol = f"{trade_asset}{base_asset}"
+                action, base_asset_quantity, quote_asset_quantity, reason = action_generator.get_action(
+                    dt, symbol, interval
+                )
+
+                traded = action in (ActionType.BUY, ActionType.SELL)
+
+                log_func = logger.info if traded else logger.debug
+                log_func("For %s, on %s Decided to %s, reason: %s", symbol, dt, action.value, reason)
+
+                if traded:
+                    order_side = SIDE_BUY if action == ActionType.BUY else SIDE_SELL
+
+                    params = {
+                        "symbol": symbol,
+                        "side": order_side,
+                        "type": ORDER_TYPE_MARKET,
+                        "quantity": 0,
+                        "quoteOrderQty": 0,
+                    }
+
+                    if quote_asset_quantity:
+                        params.update({"quoteOrderQty": quote_asset_quantity})
+
+                    if base_asset_quantity:
+                        params.update({"quantity": base_asset_quantity})
+                    try:
+                        client.create_order(**params)
+                    except Exception as e:
+                        logger.info(e)
+                if idx == total_intervals - 1 and idx2 == len(trade_assets) - 1:
+                    logger.info("Total worth: %s", client.get_total_usdt())
+        bar.update()
+    logger.debug(client.asset_report)
+    logger.debug(client.get_total_usdt())
+    for trade_asset in trade_assets:
+        symbol = f"{trade_asset}{base_asset}"
+        client.generate_order_chart(symbol, end_dt, interval, base_asset)
+</file>
+
+<file path="jarvis/commands/download.py">
+"""Download command for fetching historical kline data from Binance."""
+
+import csv
+from collections import defaultdict
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from binance.client import Client
+
+from jarvis.logging import logger
+
+
+def download(
+    symbols: list[str],
+    interval: str = "1h",
+    start_dt: datetime | None = None,
+    end_dt: datetime | None = None,
+    data_dir: str = "data/binance",
+) -> dict[str, int]:
+    """Download historical kline data for multiple symbols.
+
+    Uses Binance public API (no authentication required).
+
+    Args:
+        symbols: List of trading pairs (e.g., ["BTCUSDT", "ETHUSDT"])
+        interval: Kline interval (e.g., "1h", "4h", "1d")
+        start_dt: Start date (defaults to 1 year ago)
+        end_dt: End date (defaults to now)
+        data_dir: Base directory for data storage
+
+    Returns:
+        Dictionary mapping symbol to number of klines downloaded
+    """
+    # Default dates
+    if end_dt is None:
+        end_dt = datetime.utcnow()
+    if start_dt is None:
+        start_dt = end_dt - timedelta(days=365)
+
+    logger.info("Downloading data for %d symbols", len(symbols))
+    logger.info("Period: %s to %s", start_dt.date(), end_dt.date())
+    logger.info("Interval: %s", interval)
+
+    # Public client - no API key needed
+    client = Client()
+
+    results = {}
+
+    for symbol in symbols:
+        logger.info("Downloading %s...", symbol)
+
+        all_klines = []
+        current_start = start_dt
+
+        while current_start < end_dt:
+            start_ts = int(current_start.timestamp() * 1000)
+            batch_end = min(current_start + timedelta(days=40), end_dt)
+            end_ts = int(batch_end.timestamp() * 1000)
+
+            try:
+                klines = client.get_klines(
+                    symbol=symbol,
+                    interval=interval,
+                    startTime=start_ts,
+                    endTime=end_ts,
+                    limit=1000,
+                )
+            except Exception as e:
+                logger.error("Failed to fetch %s: %s", symbol, e)
+                break
+
+            if not klines:
+                break
+
+            all_klines.extend(klines)
+
+            # Move to next batch
+            last_time = klines[-1][0]
+            current_start = datetime.fromtimestamp(last_time / 1000) + timedelta(hours=1)
+
+        if not all_klines:
+            logger.warning("No data fetched for %s", symbol)
+            results[symbol] = 0
+            continue
+
+        # Save to CSV files (one per day)
+        symbol_dir = Path(data_dir) / symbol / interval
+        symbol_dir.mkdir(parents=True, exist_ok=True)
+
+        by_day: dict[str, list] = defaultdict(list)
+        for k in all_klines:
+            dt = datetime.fromtimestamp(k[0] / 1000)
+            by_day[dt.strftime("%Y%m%d")].append(k)
+
+        for day_str, klines in by_day.items():
+            file_path = symbol_dir / f"{day_str}.csv"
+            with open(file_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                for k in klines:
+                    writer.writerow(k)
+
+        logger.info("  %s: %d klines, %d files", symbol, len(all_klines), len(by_day))
+        results[symbol] = len(all_klines)
+
+    logger.info("Download complete")
+    return results
+</file>
+
+<file path="jarvis/commands/evolve.py">
+"""Evolve command for the Jarvis GA trading system."""
+
+from datetime import datetime, timedelta
+from decimal import Decimal
+from pathlib import Path
+
+import enlighten
+
+from jarvis.ga import Population
+from jarvis.logging import logger
+
+
+def evolve(
+    base_asset: str,
+    trade_assets: list[str],
+    interval: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    population_size: int = 50,
+    generations: int = 100,
+    rules_per_individual: int = 5,
+    starting_amount: Decimal = Decimal("100"),
+    commission_ratio: Decimal = Decimal("0.001"),
+    investment_ratio: Decimal = Decimal("0.2"),
+    corpus_path: str | None = None,
+) -> Population:
+    """Evolve a population of trading strategies.
+
+    Args:
+        base_asset: Base asset (e.g., USDT)
+        trade_assets: List of assets to trade (e.g., ["BTC", "ETH"])
+        interval: Kline interval (e.g., "1h")
+        start_dt: Start datetime for backtest
+        end_dt: End datetime for backtest
+        population_size: Number of individuals in population
+        generations: Number of generations to evolve
+        rules_per_individual: Number of rules per individual
+        starting_amount: Starting balance for backtest
+        commission_ratio: Trading commission ratio
+        investment_ratio: Fraction of balance to invest per trade
+        corpus_path: Path to load/save population corpus
+
+    Returns:
+        The evolved population
+    """
+    bar_manager = enlighten.get_manager()
+
+    # Load existing corpus or create new population
+    if corpus_path and Path(corpus_path).exists():
+        logger.info("Loading existing corpus from %s", corpus_path)
+        population = Population.load(corpus_path)
+        # Ensure correct population size
+        while len(population.individuals) < population_size:
+            population.individuals.append(population.individuals[0].mutate())
+    else:
+        logger.info("Creating new random population with %d individuals", population_size)
+        population = Population.create_random(population_size, rules_per_individual)
+
+    gen_bar = bar_manager.counter(total=generations, desc="Evolving", unit="generations")
+
+    for gen in range(generations):
+        # Evaluate fitness for each trade asset
+        for trade_asset in trade_assets:
+            symbol = f"{trade_asset}{base_asset}"
+            population.evaluate_fitness(
+                symbol=symbol,
+                interval=interval,
+                start_dt=start_dt,
+                end_dt=end_dt,
+                starting_amount=starting_amount,
+                commission_ratio=commission_ratio,
+                investment_ratio=investment_ratio,
+            )
+
+        best = population.get_best()
+        avg = population.get_average_fitness()
+        logger.info(
+            "Generation %d: best=%.2f, avg=%.2f, rules=%d",
+            population.generation,
+            best.fitness,
+            avg,
+            len(best.rules),
+        )
+
+        # Evolve to next generation
+        population = population.evolve()
+        gen_bar.update()
+
+    # Final evaluation
+    for trade_asset in trade_assets:
+        symbol = f"{trade_asset}{base_asset}"
+        population.evaluate_fitness(
+            symbol=symbol,
+            interval=interval,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            starting_amount=starting_amount,
+            commission_ratio=commission_ratio,
+            investment_ratio=investment_ratio,
+        )
+
+    # Save corpus
+    if corpus_path:
+        population.save(corpus_path)
+        logger.info("Saved corpus to %s", corpus_path)
+
+    # Log best individual
+    best = population.get_best()
+    logger.info("Best individual: fitness=%.2f", best.fitness)
+    for i, rule in enumerate(best.rules):
+        indicator_info = rule.indicator.to_dict()
+        logger.info(
+            "  Rule %d: %s, target=%.4f, weight=%.4f",
+            i + 1,
+            indicator_info["type"],
+            rule.target,
+            rule.weight,
+        )
+
+    return population
+</file>
+
+<file path="jarvis/commands/trade.py">
+"""Trade command for the Jarvis trading system."""
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
+
+from binance.enums import ORDER_TYPE_MARKET, SIDE_BUY, SIDE_SELL
+
+from jarvis.actions import AllInActionGenerator
+from jarvis.client import assets_to_usdt, get_binance_client
+from jarvis.logging import logger
+from jarvis.models import ActionType
+from jarvis.settings import notify, settings
+from jarvis.signals import VWMASignalGenerator
+from jarvis.utils import decimal_as_str
+
+
+def trade(base_asset: str, trade_assets: list[str], interval: str, investment_ratio: Decimal) -> None:
+    """Execute live trading based on signal generators."""
+    # Use fake client for klines (reads from cached CSV files)
+    # and real client for actual trading operations
+    client = get_binance_client()
+    action_generator = AllInActionGenerator(
+        client, signal_generators={"VWMA": VWMASignalGenerator(client)}, investment_multiplier=investment_ratio
+    )
+    dt = datetime.now(UTC).replace(tzinfo=None)
+    grouped_actions: dict[ActionType, str] = {ActionType.BUY: "", ActionType.SELL: ""}
+
+    for trade_asset in trade_assets:
+        symbol = f"{trade_asset}{base_asset}"
+        action, base_asset_quantity, quote_asset_quantity, reason = action_generator.get_action(dt, symbol, interval)
+
+        if action not in (ActionType.BUY, ActionType.SELL):
+            message = f"Decided to {action.value} for {trade_asset}, Reason: {reason}"
+            logger.info(message)
+            if settings.debug:
+                notify(message)
+            continue
+
+        order_side = SIDE_BUY if action == ActionType.BUY else SIDE_SELL
+
+        params: dict[str, Any] = {
+            "symbol": symbol,
+            "side": order_side,
+            "type": ORDER_TYPE_MARKET,
+        }
+
+        if quote_asset_quantity:
+            params.update({"quoteOrderQty": decimal_as_str(quote_asset_quantity)})
+
+        if base_asset_quantity:
+            params.update({"quantity": decimal_as_str(base_asset_quantity)})
+
+        try:
+            order = client.create_order(**params)
+        except Exception as e:
+            logger.info(e)
+            continue
+
+        if order is None:
+            continue
+
+        # * 100 ETH for 20 USDT (BTCUSDT)
+
+        grouped_actions[action] += "• %s %s for %s %s\n" % (
+            order["executedQty"],
+            trade_asset,
+            order["cummulativeQuoteQty"],
+            base_asset,
+        )
+
+    message = ""
+    if grouped_actions[ActionType.BUY]:
+        message += "*I've Bought:*\n\n" + grouped_actions[ActionType.BUY]
+
+    if grouped_actions[ActionType.SELL]:
+        message += "*I've Sold:*\n" + grouped_actions[ActionType.SELL]
+
+    if message:
+        assets: dict[str, Decimal] = dict(
+            [
+                (asset["asset"], Decimal(asset["free"]))
+                for asset in client.get_account()["balances"]
+                if Decimal(asset["free"]) > 0
+            ]
+        )
+
+        assets_as_usdt = assets_to_usdt(client, assets)
+        message += "\n💰 *Your current assets*:\n"
+        for asset, value in assets.items():
+            message += f"• {asset}: {decimal_as_str(value)}\n"
+
+        message += "\n🤑 *Total Worth*:\n"
+        message += f"• {decimal_as_str(assets_as_usdt)} USDT (TWT not Included)"
+        notify(message)
+</file>
+
+<file path="jarvis/commands/train.py">
+"""Train command for training a strategy for a single symbol."""
+
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
+
+import enlighten
+import pandas as pd
+
+from jarvis.client import get_binance_client
+from jarvis.ga.individual import Individual
+from jarvis.ga.population import Population
+from jarvis.ga.strategy import PerformanceMetrics, Strategy, TrainingConfig
+from jarvis.logging import logger
+from jarvis.models import ActionType
+from jarvis.utils import datetime_to_timestamp, dt_range, interval_to_timedelta
+
+
+def calculate_metrics(
+    individual: Individual,
+    symbol: str,
+    interval: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    starting_amount: Decimal = Decimal("100"),
+    commission_ratio: Decimal = Decimal("0.001"),
+    investment_ratio: Decimal = Decimal("0.2"),
+) -> PerformanceMetrics:
+    """Calculate detailed performance metrics for an individual."""
+    base_asset = "USDT"
+    trade_asset = symbol[:-4] if symbol.endswith("USDT") else symbol[:-3]
+
+    interval_td = interval_to_timedelta(interval)
+    all_dts = list(dt_range(start_dt, end_dt, interval_td))
+
+    client = get_binance_client(
+        fake=True,
+        extra_params={"assets": {base_asset: starting_amount}, "commission_ratio": commission_ratio},
+    )
+
+    assets: dict[str, Decimal] = {base_asset: starting_amount}
+    peak_equity = starting_amount
+    max_drawdown_pct = 0.0
+    total_trades = 0
+
+    for dt in all_dts:
+        end_ts = datetime_to_timestamp(dt)
+        try:
+            klines = client.get_klines(symbol=symbol, interval=interval, limit=100, endTime=end_ts)
+            if not klines or len(klines) < 50:
+                continue
+        except Exception:
+            continue
+
+        df = pd.DataFrame([k.model_dump() for k in klines])
+        for col in ["open", "high", "low", "close", "volume"]:
+            if col in df.columns:
+                df[col] = df[col].astype(float)
+
+        price = Decimal(str(df["close"].iloc[-1]))
+
+        # Calculate equity
+        equity = assets.get(base_asset, Decimal("0"))
+        if assets.get(trade_asset, Decimal("0")) > 0:
+            equity += assets[trade_asset] * price
+
+        # Track drawdown
+        if equity > peak_equity:
+            peak_equity = equity
+        if peak_equity > 0:
+            drawdown_pct = float((peak_equity - equity) / peak_equity * 100)
+            if drawdown_pct > max_drawdown_pct:
+                max_drawdown_pct = drawdown_pct
+
+        # Execute signal
+        signal = individual.get_signal(df)
+
+        if signal == ActionType.BUY:
+            quote_balance = assets.get(base_asset, Decimal("0"))
+            spend_amount = quote_balance * investment_ratio
+            if spend_amount > 0 and price > 0:
+                after_fee = spend_amount * (1 - commission_ratio)
+                buy_qty = after_fee / price
+                assets[base_asset] = quote_balance - spend_amount
+                assets[trade_asset] = assets.get(trade_asset, Decimal("0")) + buy_qty
+                total_trades += 1
+
+        elif signal == ActionType.SELL:
+            sell_qty = assets.get(trade_asset, Decimal("0"))
+            if sell_qty > 0 and price > 0:
+                proceeds = sell_qty * price
+                after_fee = proceeds * (1 - commission_ratio)
+                assets[trade_asset] = Decimal("0")
+                assets[base_asset] = assets.get(base_asset, Decimal("0")) + after_fee
+                total_trades += 1
+
+    # Final equity
+    final_equity = assets.get(base_asset, Decimal("0"))
+    if assets.get(trade_asset, Decimal("0")) > 0:
+        final_equity += assets[trade_asset] * price
+
+    return_pct = float((final_equity - starting_amount) / starting_amount * 100)
+
+    return PerformanceMetrics(
+        fitness=float(final_equity),
+        return_pct=return_pct,
+        max_drawdown_pct=max_drawdown_pct,
+        total_trades=total_trades,
+        peak_equity=float(peak_equity),
+    )
+
+
+def train(
+    symbol: str,
+    interval: str = "1h",
+    start_dt: datetime | None = None,
+    end_dt: datetime | None = None,
+    population_size: int = 100,
+    generations: int = 30,
+    rules_per_individual: int = 8,
+    starting_amount: Decimal = Decimal("100"),
+    commission_ratio: Decimal = Decimal("0.001"),
+    investment_ratio: Decimal = Decimal("0.2"),
+    strategies_dir: str = "strategies",
+) -> Strategy:
+    """Train a trading strategy for a single symbol.
+
+    Args:
+        symbol: Trading pair (e.g., "BTCUSDT")
+        interval: Kline interval (e.g., "1h")
+        start_dt: Training start date (defaults to 6 months ago)
+        end_dt: Training end date (defaults to now)
+        population_size: GA population size
+        generations: Number of generations
+        rules_per_individual: Rules per trading strategy
+        starting_amount: Starting balance for fitness calculation
+        commission_ratio: Trading commission
+        investment_ratio: Fraction of balance per trade
+        strategies_dir: Directory to save strategy
+
+    Returns:
+        Trained Strategy object
+    """
+    # Default dates: last 6 months
+    if end_dt is None:
+        end_dt = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    if start_dt is None:
+        start_dt = end_dt.replace(month=end_dt.month - 6) if end_dt.month > 6 else end_dt.replace(
+            year=end_dt.year - 1, month=end_dt.month + 6
+        )
+
+    logger.info("Training strategy for %s", symbol)
+    logger.info("Period: %s to %s", start_dt.date(), end_dt.date())
+    logger.info("Population: %d, Generations: %d, Rules: %d", population_size, generations, rules_per_individual)
+
+    bar_manager = enlighten.get_manager()
+    gen_bar = bar_manager.counter(total=generations, desc=f"Training {symbol}", unit="gen")
+
+    # Get approximate current price for proper target scaling
+    price_hint = None
+    try:
+        client = get_binance_client(
+            fake=True,
+            extra_params={"assets": {"USDT": starting_amount}, "commission_ratio": commission_ratio},
+        )
+        end_ts = datetime_to_timestamp(end_dt)
+        klines = client.get_klines(symbol=symbol, interval=interval, limit=1, endTime=end_ts)
+        if klines:
+            price_hint = float(klines[-1].close)
+            logger.info("Price hint for %s: %.2f", symbol, price_hint)
+    except Exception as e:
+        logger.warning("Could not get price hint: %s", e)
+
+    # Create initial population
+    population = Population.create_random(population_size, rules_per_individual, price_hint=price_hint)
+
+    best_fitness = 0.0
+    best_individual = None
+
+    for gen in range(generations):
+        # Evaluate fitness
+        population.evaluate_fitness(
+            symbol=symbol,
+            interval=interval,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            starting_amount=starting_amount,
+            commission_ratio=commission_ratio,
+            investment_ratio=investment_ratio,
+        )
+
+        current_best = population.get_best()
+        if current_best.fitness > best_fitness:
+            best_fitness = current_best.fitness
+            best_individual = current_best
+
+        if gen % 5 == 0 or gen == generations - 1:
+            logger.info(
+                "Gen %d: best=%.2f, avg=%.2f",
+                gen,
+                current_best.fitness,
+                population.get_average_fitness(),
+            )
+
+        # Evolve (except last generation)
+        if gen < generations - 1:
+            population = population.evolve()
+
+        gen_bar.update()
+
+    gen_bar.close()
+    bar_manager.stop()
+
+    # Use the best individual found across all generations
+    if best_individual is None:
+        best_individual = population.get_best()
+
+    # Calculate detailed metrics
+    logger.info("Calculating performance metrics...")
+    metrics = calculate_metrics(
+        best_individual,
+        symbol,
+        interval,
+        start_dt,
+        end_dt,
+        starting_amount,
+        commission_ratio,
+        investment_ratio,
+    )
+
+    # Create strategy
+    training_config = TrainingConfig(
+        start_date=start_dt.strftime("%Y-%m-%d"),
+        end_date=end_dt.strftime("%Y-%m-%d"),
+        generations=generations,
+        population_size=population_size,
+        rules_per_individual=rules_per_individual,
+    )
+
+    strategy = Strategy(
+        symbol=symbol,
+        interval=interval,
+        individual=best_individual,
+        training=training_config,
+        performance=metrics,
+    )
+
+    # Save strategy
+    filepath = strategy.save(strategies_dir)
+    logger.info("Strategy saved to %s", filepath)
+
+    # Log results
+    logger.info("=== Training Complete ===")
+    logger.info("Symbol: %s", symbol)
+    logger.info("Return: %.2f%%", metrics.return_pct)
+    logger.info("Max Drawdown: %.2f%%", metrics.max_drawdown_pct)
+    logger.info("Total Trades: %d", metrics.total_trades)
+    logger.info("Rules: %d", len(best_individual.rules))
+
+    return strategy
+</file>
+
+<file path="jarvis/ga/__init__.py">
+"""Genetic Algorithm based trading strategy optimizer."""
+
+from jarvis.ga.indicators import (
+    EMA,
+    MACD,
+    MACD_HIST,
+    PRICE,
+    RSI,
+    SMA,
+    VOLUME,
+    Indicator,
+)
+from jarvis.ga.individual import Individual
+from jarvis.ga.population import Population
+from jarvis.ga.rule import Rule
+
+__all__ = [
+    "Indicator",
+    "RSI",
+    "SMA",
+    "EMA",
+    "MACD",
+    "MACD_HIST",
+    "VOLUME",
+    "PRICE",
+    "Rule",
+    "Individual",
+    "Population",
+]
+</file>
+
+<file path="jarvis/ga/indicators.py">
+"""Technical indicators for the GA trading system.
+
+Uses TA-Lib (C-based) for performance when available, falls back to `ta` (pure Python).
+"""
+
+import random
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+# Try to import talib (C-based, fast), fall back to ta (pure Python, slow)
+try:
+    import talib
+
+    USE_TALIB = True
+except ImportError:
+    import ta
+
+    USE_TALIB = False
+
+
+@dataclass
+class Indicator(ABC):
+    """Base class for all technical indicators."""
+
+    @abstractmethod
+    def calculate(self, df: pd.DataFrame) -> float:
+        """Calculate the indicator value from OHLCV dataframe.
+
+        Args:
+            df: DataFrame with columns: open, high, low, close, volume
+
+        Returns:
+            The calculated indicator value (single float).
+        """
+        pass
+
+    @abstractmethod
+    def mutate(self) -> "Indicator":
+        """Return a mutated copy of this indicator."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def random(cls) -> "Indicator":
+        """Create a random instance of this indicator."""
+        pass
+
+    @abstractmethod
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dictionary for JSON export."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Indicator":
+        """Deserialize from dictionary."""
+        pass
+
+
+@dataclass
+class RSI(Indicator):
+    """Relative Strength Index indicator (0-100 range)."""
+
+    period: int = 14
+
+    def calculate(self, df: pd.DataFrame) -> float:
+        if USE_TALIB:
+            close = df["close"].to_numpy()
+            result = talib.RSI(close, timeperiod=self.period)
+            return float(result[-1]) if not np.isnan(result[-1]) else 50.0
+        else:
+            rsi = ta.momentum.RSIIndicator(df["close"], window=self.period)
+            values = rsi.rsi()
+            return float(values.iloc[-1]) if not values.empty else 50.0
+
+    def mutate(self) -> "RSI":
+        new_period = self.period + random.randint(-3, 3)
+        new_period = max(5, min(30, new_period))  # clamp to 5-30
+        return RSI(period=new_period)
+
+    @classmethod
+    def random(cls) -> "RSI":
+        return cls(period=random.randint(5, 30))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "RSI", "params": {"period": self.period}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RSI":
+        return cls(period=data["params"]["period"])
+
+
+@dataclass
+class SMA(Indicator):
+    """Simple Moving Average indicator."""
+
+    period: int = 20
+
+    def calculate(self, df: pd.DataFrame) -> float:
+        if USE_TALIB:
+            close = df["close"].to_numpy()
+            result = talib.SMA(close, timeperiod=self.period)
+            return float(result[-1]) if not np.isnan(result[-1]) else 0.0
+        else:
+            sma = ta.trend.SMAIndicator(df["close"], window=self.period)
+            values = sma.sma_indicator()
+            return float(values.iloc[-1]) if not values.empty else 0.0
+
+    def mutate(self) -> "SMA":
+        new_period = self.period + random.randint(-5, 5)
+        new_period = max(5, min(200, new_period))
+        return SMA(period=new_period)
+
+    @classmethod
+    def random(cls) -> "SMA":
+        return cls(period=random.randint(5, 200))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "SMA", "params": {"period": self.period}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SMA":
+        return cls(period=data["params"]["period"])
+
+
+@dataclass
+class EMA(Indicator):
+    """Exponential Moving Average indicator."""
+
+    period: int = 20
+
+    def calculate(self, df: pd.DataFrame) -> float:
+        if USE_TALIB:
+            close = df["close"].to_numpy()
+            result = talib.EMA(close, timeperiod=self.period)
+            return float(result[-1]) if not np.isnan(result[-1]) else 0.0
+        else:
+            ema = ta.trend.EMAIndicator(df["close"], window=self.period)
+            values = ema.ema_indicator()
+            return float(values.iloc[-1]) if not values.empty else 0.0
+
+    def mutate(self) -> "EMA":
+        new_period = self.period + random.randint(-5, 5)
+        new_period = max(5, min(200, new_period))
+        return EMA(period=new_period)
+
+    @classmethod
+    def random(cls) -> "EMA":
+        return cls(period=random.randint(5, 200))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "EMA", "params": {"period": self.period}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "EMA":
+        return cls(period=data["params"]["period"])
+
+
+@dataclass
+class MACD(Indicator):
+    """MACD line indicator."""
+
+    fast: int = 12
+    slow: int = 26
+    signal: int = 9
+
+    def calculate(self, df: pd.DataFrame) -> float:
+        if USE_TALIB:
+            close = df["close"].to_numpy()
+            macd_line, _, _ = talib.MACD(
+                close, fastperiod=self.fast, slowperiod=self.slow, signalperiod=self.signal
+            )
+            return float(macd_line[-1]) if not np.isnan(macd_line[-1]) else 0.0
+        else:
+            macd = ta.trend.MACD(
+                df["close"],
+                window_fast=self.fast,
+                window_slow=self.slow,
+                window_sign=self.signal,
+            )
+            values = macd.macd()
+            return float(values.iloc[-1]) if not values.empty else 0.0
+
+    def mutate(self) -> "MACD":
+        new_fast = self.fast + random.randint(-2, 2)
+        new_slow = self.slow + random.randint(-3, 3)
+        new_signal = self.signal + random.randint(-2, 2)
+        new_fast = max(5, min(20, new_fast))
+        new_slow = max(20, min(40, new_slow))
+        new_signal = max(5, min(15, new_signal))
+        if new_fast >= new_slow:
+            new_slow = new_fast + 5
+        return MACD(fast=new_fast, slow=new_slow, signal=new_signal)
+
+    @classmethod
+    def random(cls) -> "MACD":
+        fast = random.randint(5, 20)
+        slow = random.randint(fast + 5, 40)
+        signal = random.randint(5, 15)
+        return cls(fast=fast, slow=slow, signal=signal)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "MACD", "params": {"fast": self.fast, "slow": self.slow, "signal": self.signal}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MACD":
+        return cls(
+            fast=data["params"]["fast"],
+            slow=data["params"]["slow"],
+            signal=data["params"]["signal"],
+        )
+
+
+@dataclass
+class MACD_HIST(Indicator):
+    """MACD Histogram indicator."""
+
+    fast: int = 12
+    slow: int = 26
+    signal: int = 9
+
+    def calculate(self, df: pd.DataFrame) -> float:
+        if USE_TALIB:
+            close = df["close"].to_numpy()
+            _, _, macd_hist = talib.MACD(
+                close, fastperiod=self.fast, slowperiod=self.slow, signalperiod=self.signal
+            )
+            return float(macd_hist[-1]) if not np.isnan(macd_hist[-1]) else 0.0
+        else:
+            macd = ta.trend.MACD(
+                df["close"],
+                window_fast=self.fast,
+                window_slow=self.slow,
+                window_sign=self.signal,
+            )
+            values = macd.macd_diff()
+            return float(values.iloc[-1]) if not values.empty else 0.0
+
+    def mutate(self) -> "MACD_HIST":
+        new_fast = self.fast + random.randint(-2, 2)
+        new_slow = self.slow + random.randint(-3, 3)
+        new_signal = self.signal + random.randint(-2, 2)
+        new_fast = max(5, min(20, new_fast))
+        new_slow = max(20, min(40, new_slow))
+        new_signal = max(5, min(15, new_signal))
+        if new_fast >= new_slow:
+            new_slow = new_fast + 5
+        return MACD_HIST(fast=new_fast, slow=new_slow, signal=new_signal)
+
+    @classmethod
+    def random(cls) -> "MACD_HIST":
+        fast = random.randint(5, 20)
+        slow = random.randint(fast + 5, 40)
+        signal = random.randint(5, 15)
+        return cls(fast=fast, slow=slow, signal=signal)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "MACD_HIST", "params": {"fast": self.fast, "slow": self.slow, "signal": self.signal}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MACD_HIST":
+        return cls(
+            fast=data["params"]["fast"],
+            slow=data["params"]["slow"],
+            signal=data["params"]["signal"],
+        )
+
+
+@dataclass
+class VOLUME(Indicator):
+    """Volume indicator (current volume)."""
+
+    period: int = 1  # Not used but kept for consistency
+
+    def calculate(self, df: pd.DataFrame) -> float:
+        return float(df["volume"].iloc[-1]) if not df.empty else 0.0
+
+    def mutate(self) -> "VOLUME":
+        return VOLUME(period=self.period)
+
+    @classmethod
+    def random(cls) -> "VOLUME":
+        return cls()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "VOLUME", "params": {"period": self.period}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "VOLUME":
+        return cls(period=data["params"].get("period", 1))
+
+
+@dataclass
+class PRICE(Indicator):
+    """Current close price indicator."""
+
+    period: int = 1  # Not used but kept for consistency
+
+    def calculate(self, df: pd.DataFrame) -> float:
+        return float(df["close"].iloc[-1]) if not df.empty else 0.0
+
+    def mutate(self) -> "PRICE":
+        return PRICE(period=self.period)
+
+    @classmethod
+    def random(cls) -> "PRICE":
+        return cls()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "PRICE", "params": {"period": self.period}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PRICE":
+        return cls(period=data["params"].get("period", 1))
+
+
+# Registry for indicator types
+INDICATOR_TYPES: dict[str, type[Indicator]] = {
+    "RSI": RSI,
+    "SMA": SMA,
+    "EMA": EMA,
+    "MACD": MACD,
+    "MACD_HIST": MACD_HIST,
+    "VOLUME": VOLUME,
+    "PRICE": PRICE,
+}
+
+
+def indicator_from_dict(data: dict[str, Any]) -> Indicator:
+    """Create an indicator from a dictionary."""
+    indicator_type = data["type"]
+    if indicator_type not in INDICATOR_TYPES:
+        raise ValueError(f"Unknown indicator type: {indicator_type}")
+    return INDICATOR_TYPES[indicator_type].from_dict(data)
+
+
+def random_indicator() -> Indicator:
+    """Create a random indicator of any type."""
+    indicator_class = random.choice(list(INDICATOR_TYPES.values()))
+    return indicator_class.random()
+</file>
+
+<file path="jarvis/ga/individual.py">
+"""Individual class for the GA trading system."""
+
+import copy
+import random
+from dataclasses import dataclass, field
+from typing import Any
+
+import pandas as pd
+
+from jarvis.ga.rule import Rule
+from jarvis.models import ActionType
+
+
+@dataclass
+class Individual:
+    """An individual trading strategy composed of multiple rules.
+
+    Signal calculation:
+    1. Calculate contribution from each rule: (value - target) * weight
+    2. Sum all contributions
+    3. If total > 1: BUY
+       If total < -1: SELL
+       Otherwise: STAY
+    """
+
+    rules: list[Rule] = field(default_factory=list)
+    fitness: float = 0.0
+
+    def get_signal(self, df: pd.DataFrame) -> ActionType:
+        """Calculate trading signal from rules.
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            ActionType.BUY, ActionType.SELL, or ActionType.STAY
+        """
+        if not self.rules:
+            return ActionType.STAY
+
+        total = sum(rule.calculate_contribution(df) for rule in self.rules)
+
+        if total > 1:
+            return ActionType.BUY
+        elif total < -1:
+            return ActionType.SELL
+        else:
+            return ActionType.STAY
+
+    def mutate(self, mutation_rate: float = 0.1) -> "Individual":
+        """Return a mutated copy of this individual.
+
+        Args:
+            mutation_rate: Probability of mutating each rule
+
+        Returns:
+            A new Individual with mutated rules
+        """
+        new_rules = []
+        for rule in self.rules:
+            if random.random() < mutation_rate:
+                new_rules.append(rule.mutate())
+            else:
+                new_rules.append(copy.deepcopy(rule))
+
+        # Small chance to add or remove a rule
+        if random.random() < 0.05 and len(new_rules) > 1:
+            # Remove a random rule
+            new_rules.pop(random.randint(0, len(new_rules) - 1))
+        elif random.random() < 0.05:
+            # Add a new random rule
+            new_rules.append(Rule.random())
+
+        return Individual(rules=new_rules, fitness=0.0)
+
+    @classmethod
+    def crossover(cls, parent1: "Individual", parent2: "Individual") -> "Individual":
+        """Create a child by combining rules from two parents.
+
+        Uses uniform crossover: each rule is randomly taken from either parent.
+        """
+        child_rules = []
+
+        # Take rules from both parents
+        max_rules = max(len(parent1.rules), len(parent2.rules))
+        for i in range(max_rules):
+            if i < len(parent1.rules) and i < len(parent2.rules):
+                # Both parents have this position, randomly choose
+                if random.random() < 0.5:
+                    child_rules.append(copy.deepcopy(parent1.rules[i]))
+                else:
+                    child_rules.append(copy.deepcopy(parent2.rules[i]))
+            elif i < len(parent1.rules):
+                # Only parent1 has this rule
+                if random.random() < 0.5:
+                    child_rules.append(copy.deepcopy(parent1.rules[i]))
+            else:
+                # Only parent2 has this rule
+                if random.random() < 0.5:
+                    child_rules.append(copy.deepcopy(parent2.rules[i]))
+
+        # Ensure at least one rule
+        if not child_rules:
+            child_rules.append(Rule.random())
+
+        return cls(rules=child_rules, fitness=0.0)
+
+    @classmethod
+    def random(cls, num_rules: int = 5, price_hint: float | None = None) -> "Individual":
+        """Create a random individual with the specified number of rules.
+
+        Args:
+            num_rules: Number of rules to generate
+            price_hint: Approximate price of the asset for setting target ranges
+        """
+        rules = [Rule.random(price_hint=price_hint) for _ in range(num_rules)]
+        return cls(rules=rules, fitness=0.0)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dictionary for JSON export."""
+        return {
+            "rules": [rule.to_dict() for rule in self.rules],
+            "fitness": self.fitness,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Individual":
+        """Deserialize from dictionary."""
+        rules = [Rule.from_dict(r) for r in data["rules"]]
+        return cls(rules=rules, fitness=data.get("fitness", 0.0))
+
+    def __repr__(self) -> str:
+        return f"Individual(rules={len(self.rules)}, fitness={self.fitness:.2f})"
+</file>
+
+<file path="jarvis/ga/population.py">
+"""Population class for the GA trading system."""
+
+import json
+import os
+import random
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+import pandas as pd
+
+from jarvis.client import get_binance_client
+from jarvis.ga.individual import Individual
+from jarvis.logging import logger
+from jarvis.models import ActionType
+from jarvis.utils import datetime_to_timestamp, dt_range, interval_to_timedelta
+
+
+def _evaluate_batch(
+    individual_dicts: list[dict[str, Any]],
+    preloaded_data: list[tuple[datetime, dict[str, Any], str]],  # (dt, df_dict, price_str)
+    base_asset: str,
+    trade_asset: str,
+    starting_amount: str,
+    commission_ratio: str,
+    investment_ratio: str,
+) -> list[float]:
+    """Evaluate a batch of individuals. Runs in separate process."""
+    from jarvis.ga.individual import Individual
+    from jarvis.models import ActionType
+
+    starting_amt = Decimal(starting_amount)
+    comm_ratio = Decimal(commission_ratio)
+    inv_ratio = Decimal(investment_ratio)
+
+    # Pre-convert DataFrames once for this batch
+    dfs_and_prices = [(pd.DataFrame(df_dict), Decimal(price_str)) for dt, df_dict, price_str in preloaded_data]
+
+    results = []
+    for individual_dict in individual_dicts:
+        individual = Individual.from_dict(individual_dict)
+        assets: dict[str, Decimal] = {base_asset: starting_amt}
+        last_price = Decimal(0)
+
+        for df, price in dfs_and_prices:
+            last_price = price
+            signal = individual.get_signal(df)
+
+            if signal == ActionType.BUY:
+                quote_balance = assets.get(base_asset, Decimal(0))
+                spend_amount = quote_balance * inv_ratio
+                if spend_amount > 0 and last_price > 0:
+                    after_fee = spend_amount * (1 - comm_ratio)
+                    buy_qty = after_fee / last_price
+                    assets[base_asset] = quote_balance - spend_amount
+                    assets[trade_asset] = assets.get(trade_asset, Decimal(0)) + buy_qty
+
+            elif signal == ActionType.SELL:
+                sell_qty = assets.get(trade_asset, Decimal(0))
+                if sell_qty > 0 and last_price > 0:
+                    proceeds = sell_qty * last_price
+                    after_fee = proceeds * (1 - comm_ratio)
+                    assets[trade_asset] = Decimal(0)
+                    assets[base_asset] = assets.get(base_asset, Decimal(0)) + after_fee
+
+        total = assets.get(base_asset, Decimal(0))
+        trade_balance = assets.get(trade_asset, Decimal(0))
+        if trade_balance > 0 and last_price > 0:
+            total += trade_balance * last_price
+        results.append(float(total))
+
+    return results
+
+
+@dataclass
+class Population:
+    """A population of trading strategies that can evolve over generations.
+
+    Attributes:
+        individuals: List of Individual trading strategies
+        generation: Current generation number
+        population_size: Target population size
+        elitism_ratio: Fraction of best individuals to preserve each generation
+        mutation_rate: Probability of mutating each rule
+    """
+
+    individuals: list[Individual] = field(default_factory=list)
+    generation: int = 0
+    population_size: int = 50
+    elitism_ratio: float = 0.1
+    mutation_rate: float = 0.1
+
+    @classmethod
+    def create_random(
+        cls, population_size: int = 50, rules_per_individual: int = 5, price_hint: float | None = None
+    ) -> "Population":
+        """Create a random initial population.
+
+        Args:
+            population_size: Number of individuals
+            rules_per_individual: Number of rules per individual
+            price_hint: Approximate price of the asset for setting target ranges
+        """
+        individuals = [
+            Individual.random(rules_per_individual, price_hint=price_hint) for _ in range(population_size)
+        ]
+        return cls(individuals=individuals, population_size=population_size)
+
+    def evaluate_fitness(
+        self,
+        symbol: str,
+        interval: str,
+        start_dt: datetime,
+        end_dt: datetime,
+        starting_amount: Decimal = Decimal("100"),
+        commission_ratio: Decimal = Decimal("0.001"),
+        investment_ratio: Decimal = Decimal("0.2"),
+    ) -> None:
+        """Evaluate fitness for all individuals using backtest.
+
+        Fitness = final balance after simulated trading.
+        """
+        base_asset = symbol[-4:] if symbol.endswith("USDT") else symbol[-3:]
+        trade_asset = symbol[:-4] if symbol.endswith("USDT") else symbol[:-3]
+
+        interval_as_timedelta = interval_to_timedelta(interval)
+
+        # Pre-load all kline data once for the entire date range
+        all_dts = list(dt_range(start_dt, end_dt, interval_as_timedelta))
+        preloaded_data: list[tuple[datetime, pd.DataFrame, Decimal]] = []
+
+        if all_dts:
+            # Load data once using a temporary client
+            temp_client = get_binance_client(
+                fake=True,
+                extra_params={"assets": {base_asset: starting_amount}, "commission_ratio": commission_ratio},
+            )
+            for dt in all_dts:
+                df = self._get_klines_as_df(temp_client, symbol, interval, dt)
+                if not df.empty and len(df) >= 50:
+                    price = Decimal(str(df["close"].iloc[-1]))
+                    preloaded_data.append((dt, df, price))
+
+        # Use parallel processing only for large populations when not using TA-Lib
+        # TA-Lib is so fast that serialization overhead outweighs parallelization benefit
+        from jarvis.ga.indicators import USE_TALIB
+
+        num_workers = min(os.cpu_count() or 4, len(self.individuals))
+        use_parallel = os.environ.get("JARVIS_NO_PARALLEL") != "1" and not USE_TALIB
+
+        if use_parallel and num_workers > 1 and len(self.individuals) >= 100:
+            # Convert data for multiprocessing (must be picklable)
+            serialized_data = [
+                (dt, df.to_dict("list"), str(price)) for dt, df, price in preloaded_data
+            ]
+
+            # Split individuals into batches for each worker
+            batch_size = len(self.individuals) // num_workers
+            batches = []
+            for i in range(num_workers):
+                start_idx = i * batch_size
+                end_idx = start_idx + batch_size if i < num_workers - 1 else len(self.individuals)
+                batches.append([ind.to_dict() for ind in self.individuals[start_idx:end_idx]])
+
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                futures = [
+                    executor.submit(
+                        _evaluate_batch,
+                        batch,
+                        serialized_data,
+                        base_asset,
+                        trade_asset,
+                        str(starting_amount),
+                        str(commission_ratio),
+                        str(investment_ratio),
+                    )
+                    for batch in batches
+                ]
+
+                # Collect results and assign fitness
+                idx = 0
+                for future in futures:
+                    batch_results = future.result()
+                    for fitness in batch_results:
+                        self.individuals[idx].fitness = fitness
+                        idx += 1
+        else:
+            # Single-threaded fallback for small populations
+            for individual in self.individuals:
+                assets: dict[str, Decimal] = {base_asset: starting_amount}
+                last_price = Decimal(0)
+
+                for dt, df, price in preloaded_data:
+                    last_price = price
+                    signal = individual.get_signal(df)
+
+                    if signal == ActionType.BUY:
+                        quote_balance = assets.get(base_asset, Decimal(0))
+                        spend_amount = quote_balance * investment_ratio
+                        if spend_amount > 0 and last_price > 0:
+                            after_fee = spend_amount * (1 - commission_ratio)
+                            buy_qty = after_fee / last_price
+                            assets[base_asset] = quote_balance - spend_amount
+                            assets[trade_asset] = assets.get(trade_asset, Decimal(0)) + buy_qty
+
+                    elif signal == ActionType.SELL:
+                        sell_qty = assets.get(trade_asset, Decimal(0))
+                        if sell_qty > 0 and last_price > 0:
+                            proceeds = sell_qty * last_price
+                            after_fee = proceeds * (1 - commission_ratio)
+                            assets[trade_asset] = Decimal(0)
+                            assets[base_asset] = assets.get(base_asset, Decimal(0)) + after_fee
+
+                total = assets.get(base_asset, Decimal(0))
+                trade_balance = assets.get(trade_asset, Decimal(0))
+                if trade_balance > 0 and last_price > 0:
+                    total += trade_balance * last_price
+                individual.fitness = float(total)
+
+    def _get_klines_as_df(
+        self, client: Any, symbol: str, interval: str, dt: datetime, lookback: int = 100
+    ) -> pd.DataFrame:
+        """Get klines as pandas DataFrame for indicator calculation.
+
+        Uses explicit endTime parameter to avoid freeze_time dependency.
+        """
+        try:
+            end_ts = datetime_to_timestamp(dt)
+            klines = client.get_klines(symbol=symbol, interval=interval, limit=lookback, endTime=end_ts)
+            if not klines:
+                return pd.DataFrame()
+
+            # Klines are Kline objects, convert to dict then DataFrame
+            df = pd.DataFrame([k.model_dump() for k in klines])
+
+            # Convert Decimal columns to float for indicator calculations
+            for col in ["open", "high", "low", "close", "volume"]:
+                if col in df.columns:
+                    df[col] = df[col].astype(float)
+
+            return df
+
+        except Exception as e:
+            logger.debug("Failed to get klines: %s", e)
+            return pd.DataFrame()
+
+    def select_parents(self) -> tuple[Individual, Individual]:
+        """Select two parents using tournament selection."""
+        tournament_size = 3
+
+        def tournament() -> Individual:
+            contestants = random.sample(self.individuals, min(tournament_size, len(self.individuals)))
+            return max(contestants, key=lambda x: x.fitness)
+
+        return tournament(), tournament()
+
+    def evolve(self) -> "Population":
+        """Evolve to the next generation.
+
+        1. Keep top individuals (elitism)
+        2. Create children through crossover
+        3. Apply mutation
+        4. Add some random individuals to prevent overfitting
+        """
+        # Sort by fitness
+        sorted_individuals = sorted(self.individuals, key=lambda x: x.fitness, reverse=True)
+
+        # Elitism: keep top performers
+        num_elite = max(1, int(self.population_size * self.elitism_ratio))
+        new_individuals = sorted_individuals[:num_elite]
+
+        # Add some random individuals (prevent overfitting)
+        num_random = max(1, int(self.population_size * 0.1))
+        for _ in range(num_random):
+            new_individuals.append(Individual.random())
+
+        # Fill rest with children
+        while len(new_individuals) < self.population_size:
+            parent1, parent2 = self.select_parents()
+            child = Individual.crossover(parent1, parent2)
+            child = child.mutate(self.mutation_rate)
+            new_individuals.append(child)
+
+        return Population(
+            individuals=new_individuals[:self.population_size],
+            generation=self.generation + 1,
+            population_size=self.population_size,
+            elitism_ratio=self.elitism_ratio,
+            mutation_rate=self.mutation_rate,
+        )
+
+    def get_best(self) -> Individual:
+        """Get the individual with highest fitness."""
+        return max(self.individuals, key=lambda x: x.fitness)
+
+    def get_average_fitness(self) -> float:
+        """Get average fitness of the population."""
+        if not self.individuals:
+            return 0.0
+        return sum(ind.fitness for ind in self.individuals) / len(self.individuals)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize population to dictionary."""
+        return {
+            "individuals": [ind.to_dict() for ind in self.individuals],
+            "generation": self.generation,
+            "population_size": self.population_size,
+            "elitism_ratio": self.elitism_ratio,
+            "mutation_rate": self.mutation_rate,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Population":
+        """Deserialize population from dictionary."""
+        individuals = [Individual.from_dict(ind) for ind in data["individuals"]]
+        return cls(
+            individuals=individuals,
+            generation=data.get("generation", 0),
+            population_size=data.get("population_size", 50),
+            elitism_ratio=data.get("elitism_ratio", 0.1),
+            mutation_rate=data.get("mutation_rate", 0.1),
+        )
+
+    def save(self, filepath: str) -> None:
+        """Save population to JSON file."""
+        with open(filepath, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+    @classmethod
+    def load(cls, filepath: str) -> "Population":
+        """Load population from JSON file."""
+        with open(filepath) as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+    def __repr__(self) -> str:
+        best = self.get_best() if self.individuals else None
+        avg = self.get_average_fitness()
+        return f"Population(gen={self.generation}, size={len(self.individuals)}, best={best.fitness if best else 0:.2f}, avg={avg:.2f})"
+</file>
+
+<file path="jarvis/ga/portfolio.py">
+"""Portfolio model for managing multiple trading strategies."""
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+from jarvis.ga.strategy import Strategy
+from jarvis.models import ActionType
+from jarvis.utils import datetime_to_timestamp, dt_range, interval_to_timedelta
+
+
+@dataclass
+class SymbolAllocation:
+    """Allocation configuration for a single symbol."""
+
+    symbol: str
+    weight: float  # 0.0 to 1.0
+    strategy: Strategy | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "weight": self.weight,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SymbolAllocation":
+        return cls(
+            symbol=data["symbol"],
+            weight=data["weight"],
+        )
+
+
+@dataclass
+class Portfolio:
+    """Portfolio managing multiple trading strategies."""
+
+    total_capital: Decimal
+    allocation_strategy: str  # "equal", "risk_adjusted", "performance_based"
+    symbols: list[SymbolAllocation] = field(default_factory=list)
+    updated_at: datetime = field(default_factory=datetime.utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "updated_at": self.updated_at.isoformat(),
+            "total_capital": str(self.total_capital),
+            "allocation_strategy": self.allocation_strategy,
+            "symbols": [s.to_dict() for s in self.symbols],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Portfolio":
+        return cls(
+            updated_at=datetime.fromisoformat(data["updated_at"]),
+            total_capital=Decimal(data["total_capital"]),
+            allocation_strategy=data["allocation_strategy"],
+            symbols=[SymbolAllocation.from_dict(s) for s in data["symbols"]],
+        )
+
+    def save(self, filepath: str | Path = "strategies/portfolio.json") -> Path:
+        """Save portfolio configuration to JSON file."""
+        filepath = Path(filepath)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        self.updated_at = datetime.utcnow()
+
+        with open(filepath, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+        return filepath
+
+    @classmethod
+    def load(cls, filepath: str | Path = "strategies/portfolio.json") -> "Portfolio":
+        """Load portfolio configuration from JSON file."""
+        filepath = Path(filepath)
+
+        with open(filepath) as f:
+            data = json.load(f)
+
+        return cls.from_dict(data)
+
+    def load_strategies(self, directory: str | Path = "strategies") -> None:
+        """Load strategy files for all symbols."""
+        for allocation in self.symbols:
+            if Strategy.exists(allocation.symbol, directory):
+                allocation.strategy = Strategy.load(allocation.symbol, directory)
+
+    def add_symbol(self, symbol: str, weight: float | None = None) -> None:
+        """Add a symbol to the portfolio."""
+        # Check if already exists
+        for alloc in self.symbols:
+            if alloc.symbol == symbol:
+                if weight is not None:
+                    alloc.weight = weight
+                return
+
+        self.symbols.append(SymbolAllocation(symbol=symbol, weight=weight or 0.0))
+        self._rebalance_weights()
+
+    def remove_symbol(self, symbol: str) -> None:
+        """Remove a symbol from the portfolio."""
+        self.symbols = [s for s in self.symbols if s.symbol != symbol]
+        self._rebalance_weights()
+
+    def _rebalance_weights(self) -> None:
+        """Rebalance weights based on allocation strategy."""
+        if not self.symbols:
+            return
+
+        if self.allocation_strategy == "equal":
+            weight = 1.0 / len(self.symbols)
+            for alloc in self.symbols:
+                alloc.weight = weight
+
+        elif self.allocation_strategy == "performance_based":
+            # Weight by return percentage (higher return = higher weight)
+            total_return = sum(
+                max(0.01, alloc.strategy.performance.return_pct) if alloc.strategy else 1.0
+                for alloc in self.symbols
+            )
+            for alloc in self.symbols:
+                ret = alloc.strategy.performance.return_pct if alloc.strategy else 1.0
+                alloc.weight = max(0.01, ret) / total_return
+
+        elif self.allocation_strategy == "risk_adjusted":
+            # Weight inversely by drawdown (lower drawdown = higher weight)
+            # Sharpe-like: return / drawdown
+            scores = []
+            for alloc in self.symbols:
+                if alloc.strategy:
+                    ret = alloc.strategy.performance.return_pct
+                    dd = max(1.0, alloc.strategy.performance.max_drawdown_pct)
+                    scores.append(ret / dd)
+                else:
+                    scores.append(1.0)
+
+            total_score = sum(max(0.01, s) for s in scores)
+            for alloc, score in zip(self.symbols, scores):
+                alloc.weight = max(0.01, score) / total_score
+
+    def backtest(
+        self,
+        interval: str,
+        start_dt: datetime,
+        end_dt: datetime,
+        commission_ratio: Decimal = Decimal("0.001"),
+        investment_ratio: Decimal = Decimal("0.2"),
+    ) -> dict[str, Any]:
+        """Run portfolio backtest across all symbols.
+
+        Returns:
+            Dictionary with backtest results including equity curve and metrics.
+        """
+        from jarvis.client import get_binance_client
+
+        # Initialize assets per symbol based on weights
+        symbol_capital: dict[str, Decimal] = {}
+        symbol_assets: dict[str, dict[str, Decimal]] = {}
+
+        for alloc in self.symbols:
+            capital = self.total_capital * Decimal(str(alloc.weight))
+            symbol_capital[alloc.symbol] = capital
+
+            base_asset = "USDT"
+            trade_asset = alloc.symbol[:-4] if alloc.symbol.endswith("USDT") else alloc.symbol[:-3]
+            symbol_assets[alloc.symbol] = {base_asset: capital, trade_asset: Decimal("0")}
+
+        # Track portfolio equity over time
+        interval_td = interval_to_timedelta(interval)
+        all_dts = list(dt_range(start_dt, end_dt, interval_td))
+
+        equity_history: list[tuple[datetime, float]] = []
+        peak_equity = self.total_capital
+        max_drawdown = Decimal("0")
+        max_drawdown_pct = 0.0
+        total_trades = 0
+
+        # Create client for data
+        client = get_binance_client(
+            fake=True,
+            extra_params={"assets": {"USDT": self.total_capital}, "commission_ratio": commission_ratio},
+        )
+
+        for dt in all_dts:
+            end_ts = datetime_to_timestamp(dt)
+            portfolio_equity = Decimal("0")
+
+            for alloc in self.symbols:
+                if not alloc.strategy:
+                    continue
+
+                symbol = alloc.symbol
+                base_asset = "USDT"
+                trade_asset = symbol[:-4] if symbol.endswith("USDT") else symbol[:-3]
+                assets = symbol_assets[symbol]
+
+                # Get klines
+                try:
+                    klines = client.get_klines(symbol=symbol, interval=interval, limit=100, endTime=end_ts)
+                    if not klines or len(klines) < 50:
+                        continue
+                except Exception:
+                    continue
+
+                df = pd.DataFrame([k.model_dump() for k in klines])
+                for col in ["open", "high", "low", "close", "volume"]:
+                    if col in df.columns:
+                        df[col] = df[col].astype(float)
+
+                price = Decimal(str(df["close"].iloc[-1]))
+
+                # Calculate equity for this symbol
+                equity = assets.get(base_asset, Decimal("0"))
+                if assets.get(trade_asset, Decimal("0")) > 0:
+                    equity += assets[trade_asset] * price
+                portfolio_equity += equity
+
+                # Get signal and execute
+                signal = alloc.strategy.individual.get_signal(df)
+
+                if signal == ActionType.BUY:
+                    quote_balance = assets.get(base_asset, Decimal("0"))
+                    spend_amount = quote_balance * investment_ratio
+                    if spend_amount > 0 and price > 0:
+                        after_fee = spend_amount * (1 - commission_ratio)
+                        buy_qty = after_fee / price
+                        assets[base_asset] = quote_balance - spend_amount
+                        assets[trade_asset] = assets.get(trade_asset, Decimal("0")) + buy_qty
+                        total_trades += 1
+
+                elif signal == ActionType.SELL:
+                    sell_qty = assets.get(trade_asset, Decimal("0"))
+                    if sell_qty > 0 and price > 0:
+                        proceeds = sell_qty * price
+                        after_fee = proceeds * (1 - commission_ratio)
+                        assets[trade_asset] = Decimal("0")
+                        assets[base_asset] = assets.get(base_asset, Decimal("0")) + after_fee
+                        total_trades += 1
+
+            # Track drawdown
+            if portfolio_equity > 0:
+                if portfolio_equity > peak_equity:
+                    peak_equity = portfolio_equity
+                drawdown = peak_equity - portfolio_equity
+                drawdown_pct = float(drawdown / peak_equity * 100)
+                if drawdown > max_drawdown:
+                    max_drawdown = drawdown
+                    max_drawdown_pct = drawdown_pct
+
+                equity_history.append((dt, float(portfolio_equity)))
+
+        # Final equity
+        final_equity = Decimal("0")
+        for alloc in self.symbols:
+            symbol = alloc.symbol
+            base_asset = "USDT"
+            trade_asset = symbol[:-4] if symbol.endswith("USDT") else symbol[:-3]
+            assets = symbol_assets[symbol]
+
+            final_equity += assets.get(base_asset, Decimal("0"))
+            # Add remaining trade assets at last known price
+            if assets.get(trade_asset, Decimal("0")) > 0:
+                # Get last price
+                try:
+                    klines = client.get_klines(symbol=symbol, interval=interval, limit=1, endTime=datetime_to_timestamp(end_dt))
+                    if klines:
+                        price = Decimal(str(klines[-1].close))
+                        final_equity += assets[trade_asset] * price
+                except Exception:
+                    pass
+
+        return_pct = float((final_equity - self.total_capital) / self.total_capital * 100)
+
+        return {
+            "start_date": start_dt.isoformat(),
+            "end_date": end_dt.isoformat(),
+            "starting_capital": float(self.total_capital),
+            "final_equity": float(final_equity),
+            "return_pct": return_pct,
+            "peak_equity": float(peak_equity),
+            "max_drawdown": float(max_drawdown),
+            "max_drawdown_pct": max_drawdown_pct,
+            "total_trades": total_trades,
+            "equity_history": equity_history,
+        }
+
+    def __repr__(self) -> str:
+        symbols_str = ", ".join(f"{s.symbol}:{s.weight:.0%}" for s in self.symbols)
+        return f"Portfolio(capital={self.total_capital}, strategy={self.allocation_strategy}, symbols=[{symbols_str}])"
+</file>
+
+<file path="jarvis/ga/rule.py">
+"""Rule class for the GA trading system."""
+
+import random
+from dataclasses import dataclass
+from typing import Any
+
+import pandas as pd
+
+from jarvis.ga.indicators import Indicator, indicator_from_dict, random_indicator
+
+
+@dataclass
+class Rule:
+    """A trading rule that combines an indicator with a target and weight.
+
+    The contribution is calculated as: (value - target) * weight
+    Where value is the indicator's calculated value.
+
+    Positive weight + value > target = positive contribution (buy signal)
+    Negative weight + value > target = negative contribution (sell signal)
+    """
+
+    indicator: Indicator
+    target: float
+    weight: float
+
+    def calculate_contribution(self, df: pd.DataFrame) -> float:
+        """Calculate this rule's contribution to the signal.
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            (indicator_value - target) * weight, or 0.0 if NaN
+        """
+        import math
+
+        value = self.indicator.calculate(df)
+        if math.isnan(value):
+            return 0.0
+        return (value - self.target) * self.weight
+
+    def mutate(self) -> "Rule":
+        """Return a mutated copy of this rule.
+
+        Randomly mutates one of: indicator, target, or weight.
+        """
+        mutation_type = random.choice(["indicator", "target", "weight"])
+
+        if mutation_type == "indicator":
+            # Mutate indicator parameters or replace with new type
+            if random.random() < 0.3:
+                # 30% chance to replace indicator type
+                new_indicator = random_indicator()
+            else:
+                # 70% chance to mutate parameters
+                new_indicator = self.indicator.mutate()
+            return Rule(indicator=new_indicator, target=self.target, weight=self.weight)
+
+        elif mutation_type == "target":
+            # Mutate target by a small factor
+            factor = random.uniform(0.9, 1.1)
+            new_target = self.target * factor
+            return Rule(indicator=self.indicator, target=new_target, weight=self.weight)
+
+        else:  # weight
+            # Mutate weight by a small amount
+            delta = random.uniform(-0.1, 0.1)
+            new_weight = self.weight + delta
+            return Rule(indicator=self.indicator, target=self.target, weight=new_weight)
+
+    @classmethod
+    def random(cls, price_hint: float | None = None) -> "Rule":
+        """Create a random rule.
+
+        Args:
+            price_hint: Approximate current price of the asset.
+                        Used to set reasonable target ranges for price-based indicators.
+                        If None, uses a default range suitable for BTC.
+        """
+        indicator = random_indicator()
+
+        # Default price hint for backwards compatibility
+        if price_hint is None:
+            price_hint = 50000.0  # BTC-ish default
+
+        # Set initial target based on indicator type
+        indicator_type = indicator.to_dict()["type"]
+        if indicator_type == "RSI":
+            target = random.uniform(20, 80)
+        elif indicator_type in ("MACD", "MACD_HIST"):
+            # MACD values scale with price, use percentage of price
+            target = random.uniform(-0.02, 0.02) * price_hint
+        elif indicator_type == "VOLUME":
+            target = random.uniform(100000, 10000000)
+        elif indicator_type == "PRICE":
+            # Target around current price (+/- 20%)
+            target = random.uniform(0.8, 1.2) * price_hint
+        else:  # SMA, EMA
+            # Moving averages around current price (+/- 20%)
+            target = random.uniform(0.8, 1.2) * price_hint
+
+        weight = random.uniform(-1, 1)
+
+        return cls(indicator=indicator, target=target, weight=weight)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dictionary."""
+        return {
+            "indicator": self.indicator.to_dict(),
+            "target": self.target,
+            "weight": self.weight,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Rule":
+        """Deserialize from dictionary."""
+        indicator = indicator_from_dict(data["indicator"])
+        return cls(
+            indicator=indicator,
+            target=data["target"],
+            weight=data["weight"],
+        )
+</file>
+
+<file path="jarvis/ga/strategy.py">
+"""Strategy model for saving/loading trained GA strategies."""
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from jarvis.ga.individual import Individual
+
+
+@dataclass
+class TrainingConfig:
+    """Configuration used during training."""
+
+    start_date: str
+    end_date: str
+    generations: int
+    population_size: int
+    rules_per_individual: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "generations": self.generations,
+            "population_size": self.population_size,
+            "rules_per_individual": self.rules_per_individual,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TrainingConfig":
+        return cls(
+            start_date=data["start_date"],
+            end_date=data["end_date"],
+            generations=data["generations"],
+            population_size=data["population_size"],
+            rules_per_individual=data.get("rules_per_individual", 5),
+        )
+
+
+@dataclass
+class PerformanceMetrics:
+    """Performance metrics from backtesting."""
+
+    fitness: float
+    return_pct: float
+    max_drawdown_pct: float
+    total_trades: int
+    peak_equity: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "fitness": self.fitness,
+            "return_pct": self.return_pct,
+            "max_drawdown_pct": self.max_drawdown_pct,
+            "total_trades": self.total_trades,
+            "peak_equity": self.peak_equity,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PerformanceMetrics":
+        return cls(
+            fitness=data["fitness"],
+            return_pct=data["return_pct"],
+            max_drawdown_pct=data["max_drawdown_pct"],
+            total_trades=data["total_trades"],
+            peak_equity=data.get("peak_equity", 0.0),
+        )
+
+
+@dataclass
+class Strategy:
+    """A trained trading strategy for a specific symbol."""
+
+    symbol: str
+    interval: str
+    individual: Individual
+    training: TrainingConfig
+    performance: PerformanceMetrics
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime = field(default_factory=datetime.utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "interval": self.interval,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "training": self.training.to_dict(),
+            "performance": self.performance.to_dict(),
+            "individual": self.individual.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Strategy":
+        return cls(
+            symbol=data["symbol"],
+            interval=data["interval"],
+            created_at=datetime.fromisoformat(data["created_at"]),
+            updated_at=datetime.fromisoformat(data["updated_at"]),
+            training=TrainingConfig.from_dict(data["training"]),
+            performance=PerformanceMetrics.from_dict(data["performance"]),
+            individual=Individual.from_dict(data["individual"]),
+        )
+
+    def save(self, directory: str | Path = "strategies") -> Path:
+        """Save strategy to JSON file."""
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+
+        filepath = directory / f"{self.symbol}.json"
+        self.updated_at = datetime.utcnow()
+
+        with open(filepath, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+        return filepath
+
+    @classmethod
+    def load(cls, symbol: str, directory: str | Path = "strategies") -> "Strategy":
+        """Load strategy from JSON file."""
+        directory = Path(directory)
+        filepath = directory / f"{symbol}.json"
+
+        with open(filepath) as f:
+            data = json.load(f)
+
+        return cls.from_dict(data)
+
+    @classmethod
+    def exists(cls, symbol: str, directory: str | Path = "strategies") -> bool:
+        """Check if strategy file exists."""
+        directory = Path(directory)
+        filepath = directory / f"{symbol}.json"
+        return filepath.exists()
+
+    def is_stale(self, max_age_days: int = 30) -> bool:
+        """Check if strategy is older than max_age_days."""
+        age = datetime.utcnow() - self.updated_at
+        return age.days > max_age_days
+
+    def __repr__(self) -> str:
+        return (
+            f"Strategy({self.symbol}, "
+            f"return={self.performance.return_pct:.1f}%, "
+            f"drawdown={self.performance.max_drawdown_pct:.1f}%, "
+            f"updated={self.updated_at.date()})"
+        )
+</file>
+
+<file path="jarvis/signals/__init__.py">
+"""Signal generators for the Jarvis trading system."""
+
+from jarvis.signals.base import SignalGenerator
+from jarvis.signals.consecutive import ConsecutiveUpDownSignalGenerator
+from jarvis.signals.sma import SMASignalGenerator
+from jarvis.signals.supertrend import SuperTrendSignalGenerator
+from jarvis.signals.vwma import VWMASignalGenerator
+
+__all__ = [
+    "SignalGenerator",
+    "SuperTrendSignalGenerator",
+    "VWMASignalGenerator",
+    "SMASignalGenerator",
+    "ConsecutiveUpDownSignalGenerator",
+]
+</file>
+
+<file path="jarvis/signals/base.py">
+"""Base signal generator class."""
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from jarvis.models import ActionType, Kline
+
+if TYPE_CHECKING:
+    pass
+
+
+class SignalGenerator:
+    """Signal generators responsible for generating Signal objects when it's
+    get_signal method is called.
+    """
+
+    def get_signal(self, dt: datetime, symbol: str, interval: str) -> tuple[ActionType, list[Kline], str]:
+        raise NotImplementedError(
+            "Signal classes must have get_signal method that returns Signal, used klines and reason."
+        )
+</file>
+
+<file path="jarvis/signals/consecutive.py">
+"""Consecutive up/down signal generator."""
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from jarvis.logging import logger
+from jarvis.models import ActionType, Color, Kline
+from jarvis.signals.base import SignalGenerator
+from jarvis.utils import datetime_to_timestamp, floor_dt, interval_to_timedelta
+
+if TYPE_CHECKING:
+    from jarvis.client import CachedClient
+
+
+class ConsecutiveUpDownSignalGenerator(SignalGenerator):
+    """Signal generator based on consecutive red/green candles."""
+
+    def __init__(self, client: "CachedClient", num_of_reds_to_sell: int = 4, num_of_greens_to_buy: int = 3) -> None:
+        self.client = client
+        self.num_of_reds_to_sell = num_of_reds_to_sell
+        self.num_of_greens_to_buy = num_of_greens_to_buy
+
+    @staticmethod
+    def get_colors(klines: list[Kline]) -> list[Color]:
+        """Classify klines as RED (bearish) or GREEN (bullish).
+
+        >>> from unittest.mock import Mock
+        >>> k1, k2 = Mock(open=100, close=90), Mock(open=100, close=110)
+        >>> ConsecutiveUpDownSignalGenerator.get_colors([k1, k2])
+        [<Color.RED: 'RED'>, <Color.GREEN: 'GREEN'>]
+        """
+        return [Color.RED if kline.open > kline.close else Color.GREEN for kline in klines]
+
+    def get_signal(self, dt: datetime, symbol: str, interval: str) -> tuple[ActionType, list[Kline], str]:
+        needed_num_of_candles = max([self.num_of_reds_to_sell, self.num_of_greens_to_buy]) + 1
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        start_dt = end_dt - interval_as_timedelta * needed_num_of_candles
+        klines = self.client.get_klines(
+            symbol=symbol,
+            interval=interval,
+            startTime=datetime_to_timestamp(start_dt),
+            endTime=datetime_to_timestamp(end_dt),
+        )
+
+        # Binance gives non closed kline as last item. We should remove it
+        # Before calculation.
+        if klines:
+            klines.pop(-1)
+
+        if len(klines) < needed_num_of_candles:
+            return ActionType.ERR, klines, f"Requested {needed_num_of_candles} klines, {len(klines)} returned"
+
+        colors = self.get_colors(klines)
+        logger.debug(
+            "Kline colors between %s - %s: " + ("%s, " * needed_num_of_candles)[:-2],
+            *[start_dt, end_dt] + [color.value for color in colors],
+        )
+
+        sell_colors = colors[-self.num_of_reds_to_sell :]
+        if all([c == Color.RED for c in sell_colors]):
+            return (
+                ActionType.SELL,
+                klines,
+                "%s reds last %s klines." % (self.num_of_reds_to_sell, self.num_of_reds_to_sell),
+            )
+
+        buy_colors = colors[-self.num_of_greens_to_buy :]
+        if all([c == Color.GREEN for c in buy_colors]):
+            return (
+                ActionType.BUY,
+                klines,
+                "%s greens last %s klines." % (self.num_of_greens_to_buy, self.num_of_greens_to_buy),
+            )
+
+        return (
+            ActionType.STAY,
+            klines,
+            f"{self.num_of_greens_to_buy} greens or {self.num_of_reds_to_sell} reds are not matched.",
+        )
+</file>
+
+<file path="jarvis/signals/sma.py">
+"""SMA signal generator."""
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from pandas import DataFrame
+from ta.trend import SMAIndicator
+
+from jarvis.models import ActionType, Kline
+from jarvis.signals.base import SignalGenerator
+from jarvis.utils import datetime_to_timestamp, decimal_as_str, floor_dt, interval_to_timedelta
+
+if TYPE_CHECKING:
+    from jarvis.client import CachedClient
+
+
+class SMASignalGenerator(SignalGenerator):
+    """Signal generator using Simple Moving Average."""
+
+    def __init__(self, client: "CachedClient", signal_length: int = 20) -> None:
+        self.client = client
+        self.length = signal_length
+
+    def get_signal(self, dt: datetime, symbol: str, interval: str) -> tuple[ActionType, list[Kline], str]:
+        needed_num_of_candles = 2 * self.length - 1
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        start_dt = end_dt - interval_as_timedelta * needed_num_of_candles
+        klines = self.client.get_klines(
+            symbol=symbol,
+            interval=interval,
+            startTime=datetime_to_timestamp(start_dt),
+            endTime=datetime_to_timestamp(end_dt),
+        )
+        trade_asset = symbol.replace("USDT", "")
+        buy_price = self.client.positions[trade_asset]["avg_buy_price"]
+
+        if not klines:
+            return ActionType.STAY, klines, "No new signal generated"
+        if klines:
+            klines.pop(-1)  ## current kline not closed
+
+        df = DataFrame([k.model_dump() for k in klines])
+        df["close"] = df["close"].astype(float)
+        df["open"] = df["open"].astype(float)
+        df["sma"] = SMAIndicator(close=df["close"], window=self.length, fillna=False).sma_indicator()
+
+        max_buy_price = df.tail(1).sma.item() + df.tail(1).sma.item() * 0.01
+        min_sell_price = df.tail(1).sma.item() - df.tail(1).sma.item() * 0.01
+
+        if df.tail(1).sma.item() <= df.tail(1).close.item() <= max_buy_price and buy_price == 0:
+            return (
+                ActionType.BUY,
+                klines,
+                "Close: %s is greater than SMA: %s"
+                % (decimal_as_str(df.tail(1).close.item()), decimal_as_str(max_buy_price)),
+            )
+
+        if df.tail(1).close.item() <= min_sell_price and df.tail(1).close.item() < df.tail(1).open.item():
+            return (
+                ActionType.SELL,
+                klines,
+                "Close: %s is smaller than SMA: %s"
+                % (decimal_as_str(df.tail(1).close.item()), decimal_as_str(min_sell_price)),
+            )
+
+        return ActionType.STAY, klines, "No new signal generated"
+</file>
+
+<file path="jarvis/signals/supertrend.py">
+"""SuperTrend signal generator."""
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from pandas import Series
+from pandas_ta import supertrend
+
+from jarvis.models import ActionType, Kline
+from jarvis.settings import settings
+from jarvis.signals.base import SignalGenerator
+from jarvis.utils import datetime_to_timestamp, floor_dt, interval_to_timedelta
+
+if TYPE_CHECKING:
+    from jarvis.client import CachedClient
+
+
+class SuperTrendSignalGenerator(SignalGenerator):
+    """Signal generator using SuperTrend indicator with ATR."""
+
+    def __init__(self, client: "CachedClient", factor: int = 3, atr_period: int = 10) -> None:
+        self.client = client
+        self.factor = factor
+        self.atr_period = atr_period
+
+    def get_signal(self, dt: datetime, symbol: str, interval: str) -> tuple[ActionType, list[Kline], str]:
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        klines = self.client.get_klines(
+            symbol=symbol,
+            interval=interval,
+            startTime=datetime_to_timestamp(settings.indicator_warmup_start),
+            endTime=datetime_to_timestamp(end_dt),
+        )
+
+        if klines:
+            klines.pop(-1)  ## current kline not closed
+
+        ind = supertrend(
+            Series(float(x.high) for x in klines),
+            Series(float(x.low) for x in klines),
+            Series(float(x.close) for x in klines),
+            self.atr_period,
+            self.factor,
+        )
+        directions = ind.iloc[:, 1]
+
+        try:
+            if directions.iat[-2] > directions.iat[-1]:
+                return (
+                    ActionType.SELL,
+                    klines,
+                    "Direction changed from: %s to %s" % (directions.iat[-2], directions.iat[-1]),
+                )
+
+            if directions.iat[-1] > directions.iat[-2]:
+                return (
+                    ActionType.BUY,
+                    klines,
+                    "Direction changed from: %s to %s" % (directions.iat[-2], directions.iat[-1]),
+                )
+
+        except IndexError:
+            return ActionType.STAY, klines, "Error"
+
+        return ActionType.STAY, klines, f"No new signal generated {directions.iat[-2]} {directions.iat[-1]}"
+</file>
+
+<file path="jarvis/signals/vwma.py">
+"""VWMA signal generator."""
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from pandas import Series
+from pandas_ta import vwma
+
+from jarvis.models import ActionType, Kline
+from jarvis.settings import settings
+from jarvis.signals.base import SignalGenerator
+from jarvis.utils import datetime_to_timestamp, decimal_as_str, floor_dt, interval_to_timedelta
+
+if TYPE_CHECKING:
+    from jarvis.client import CachedClient
+
+
+class VWMASignalGenerator(SignalGenerator):
+    """Signal generator using Volume-Weighted Moving Average."""
+
+    def __init__(self, client: "CachedClient", signal_length: int = 20, base_asset: str = "USDT") -> None:
+        self.client = client
+        self.length = signal_length
+        self.base_asset = base_asset
+
+    def get_signal(self, dt: datetime, symbol: str, interval: str) -> tuple[ActionType, list[Kline], str]:
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        klines = self.client.get_klines(
+            symbol=symbol,
+            interval=interval,
+            startTime=datetime_to_timestamp(settings.indicator_warmup_start),
+            endTime=datetime_to_timestamp(end_dt),
+        )
+        buy_price = 0
+
+        if klines:
+            klines.pop(-1)  ## current kline not closed
+
+        ohlc4 = Series((float(x.close) + float(x.open) + float(x.high) + float(x.low)) / 4 for x in klines)
+
+        vwma_arr = vwma(ohlc4, Series(float(x.volume) for x in klines), self.length)
+
+        action = ActionType.STAY
+        actions = [action]
+
+        for i in range(self.length, len(ohlc4)):
+            highest_vwma = max(vwma_arr[i : -self.length + i : -1])
+            lowest_vwma = min(vwma_arr[i : -self.length + i : -1])
+            close = ohlc4.iat[i]
+            if close > highest_vwma and actions[-1] != ActionType.BUY and buy_price == 0:
+                action = ActionType.BUY
+                buy_price = close
+            elif close < lowest_vwma and actions[-1] != ActionType.SELL and buy_price != 0:
+                action = ActionType.SELL
+                buy_price = 0
+            else:
+                action = ActionType.STAY
+
+            actions.append(action)
+
+        if actions[-1] == ActionType.BUY:
+            return (
+                ActionType.BUY,
+                klines,
+                "Close: %s is greater than VWMA: %s" % (decimal_as_str(ohlc4.iat[-1]), decimal_as_str(highest_vwma)),
+            )
+
+        if actions[-1] == ActionType.SELL:
+            return (
+                ActionType.SELL,
+                klines,
+                "Close: %s is smaller than VWMA: %s" % (decimal_as_str(ohlc4.iat[-1]), decimal_as_str(lowest_vwma)),
+            )
+
+        return ActionType.STAY, klines, "No new signal generated"
+</file>
+
+<file path="jarvis/__init__.py">
+"""Jarvis - Cryptocurrency trading automation system."""
+
+from jarvis.actions import ActionGenerator, AllInActionGenerator
+from jarvis.client import CachedClient, get_binance_client
+from jarvis.commands import backtest, evolve, trade
+from jarvis.models import ActionType, Color, FakeResponse, Kline, Position
+from jarvis.settings import Settings, get_settings, notify, settings
+from jarvis.signals import (
+    ConsecutiveUpDownSignalGenerator,
+    SignalGenerator,
+    SMASignalGenerator,
+    SuperTrendSignalGenerator,
+    VWMASignalGenerator,
+)
+
+__all__ = [
+    # Models
+    "ActionType",
+    "Color",
+    "FakeResponse",
+    "Kline",
+    "Position",
+    # Settings
+    "Settings",
+    "get_settings",
+    "notify",
+    "settings",
+    # Client
+    "CachedClient",
+    "get_binance_client",
+    # Signals
+    "ConsecutiveUpDownSignalGenerator",
+    "SignalGenerator",
+    "SMASignalGenerator",
+    "SuperTrendSignalGenerator",
+    "VWMASignalGenerator",
+    # Actions
+    "ActionGenerator",
+    "AllInActionGenerator",
+    # Commands
+    "backtest",
+    "evolve",
+    "trade",
+]
+</file>
+
+<file path="jarvis/client.py">
+"""Binance client wrapper with caching and offline support."""
+
+import csv
+import os
+from collections import defaultdict
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from functools import wraps
+from os import makedirs
+from os.path import dirname, exists
+from pathlib import Path
+from typing import Any, TypeVar
+
+import mplfinance as mpf
+import pandas as pd
+import ring
+from binance.client import Client
+from binance.enums import (
+    KLINE_INTERVAL_1MINUTE,
+    ORDER_RESP_TYPE_RESULT,
+    ORDER_TYPE_MARKET,
+    SIDE_BUY,
+    SIDE_SELL,
+)
+from binance.exceptions import BinanceAPIException
+
+from jarvis.logging import logger
+from jarvis.models import FakeResponse, Kline
+from jarvis.settings import settings
+from jarvis.utils import (
+    DAY_AS_TIMEDELTA,
+    assets_to_str,
+    calculate_avg_buy_price,
+    ceil_dt,
+    datetime_to_timestamp,
+    decimal_as_str,
+    dt_range,
+    floor_dt,
+    interval_to_seconds,
+    interval_to_timedelta,
+    ratio_as_str,
+    timestamp_to_datetime,
+)
+
+T = TypeVar("T")
+
+# Project root directory (parent of src/)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+
+def get_day_file_path(symbol: str, interval: str, day: datetime) -> str:
+    """
+    >>> get_day_file_path('BTCUSDT', '1h', datetime(2020, 1, 1)).endswith('data/binance/BTCUSDT/1h/20200101.csv')
+    True
+    """
+    file_name = day.strftime("%Y%m%d.csv")
+    return str(PROJECT_ROOT / "data" / "binance" / symbol / interval / file_name)
+
+
+def create_day_file(client: Client | None, symbol: str, interval: str, day: datetime) -> str:
+    """Fetch klines from given symbol and interval and write to day file.
+
+    TODO: Doctests.
+    """
+    if client is None:
+        file_path = get_day_file_path(symbol, interval, day)
+        raise FileNotFoundError(f"CSV file not found and no client available to fetch data: {file_path}")
+
+    interval_delta = interval_to_timedelta(interval)
+    file_path = get_day_file_path(symbol, interval, day)
+
+    start = datetime(year=day.year, month=day.month, day=day.day)
+    end = start + timedelta(hours=23, minutes=59, seconds=59, microseconds=999999)
+
+    # Binance gives maximum 500 klines at one time.
+    num_of_klines = (end - start) / interval_delta
+    num_of_iterations = round(max(num_of_klines / 500, 1))
+    limit_delta = interval_delta * 500
+
+    klines: list[Any] = []
+    for idx in range(num_of_iterations):
+        page_start = start + (interval_delta * idx * 500)
+        page_end = min(page_start + limit_delta, end)
+        logger.debug(
+            "Fetching kline data from Binance (%s / %s) (%s / %s).", idx + 1, num_of_iterations, page_start, page_end
+        )
+        klines.extend(
+            client.get_klines(
+                symbol=symbol,
+                interval=interval,
+                startTime=datetime_to_timestamp(page_start),
+                endTime=datetime_to_timestamp(page_end),
+            )
+        )
+
+    file_dir = dirname(file_path)
+    if not exists(file_dir):
+        makedirs(file_dir)
+        logger.debug(f"{file_dir} created.")
+
+    with open(file_path, "w", newline="") as csv_file:
+        field_names = [
+            "Open Time",
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume",
+            "Close Time",
+            "Quote Asset Volume",
+            "Number of trades",
+            "Taker Buy Base Asset Volume",
+            "Taker Buy Quote Asset volume",
+        ]
+        writer = csv.writer(csv_file)
+        writer.writerow(field_names)
+        for kline in klines:
+            writer.writerow(kline)
+    logger.debug(f"{file_path} written with {len(klines)} records.")
+    return file_path
+
+
+@ring.lru()  # type: ignore[untyped-decorator]
+def load_day_file(symbol: str, interval: str, day: datetime, file_path: str | None = None) -> list[list[Any]]:
+    """Load day file, make type conversions and return list of lists."""
+    file_path = file_path or get_day_file_path(symbol, interval, day)
+    lines: list[list[Any]] = []
+    with open(file_path) as csv_file:
+        reader = csv.reader(csv_file)
+        next(reader)  # Skip header.
+        for _line in reader:
+            open_time = int(_line[0])
+            close_time = int(_line[6])
+            line: list[Any] = list(map(float, _line))
+            line[0] = open_time
+            line[6] = close_time
+            lines.append(line)
+    logger.debug("Loaded day file %s", file_path)
+    return lines
+
+
+def get_expected_num_of_lines_in_day_file(
+    day: datetime, interval_delta: timedelta, utc_now: datetime | None = None
+) -> int:
+    """Calculate expected number of klines in a day file based on interval.
+
+    >>> day = datetime(2020, 1, 1)
+    >>> now = datetime(2020, 1, 1, 12, 0)
+    >>> get_expected_num_of_lines_in_day_file(day, timedelta(hours=1), now)
+    12
+    >>> get_expected_num_of_lines_in_day_file(day, timedelta(hours=4), now)
+    3
+    """
+    utc_now = utc_now or datetime.now(UTC)
+    delta = min(utc_now - day, DAY_AS_TIMEDELTA)
+    return int(delta / interval_delta)
+
+
+def get_klines_from_day_files(
+    client: Client | None,
+    symbol: str,
+    interval: str,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    limit: int = 500,
+) -> list[Kline]:
+    """
+    1. If end_ts is not given, make it timestamp of utcnow.
+    2. Floor end_ts to the given interval.
+
+       For example, if end_ts 2020-1-1 14:38 and interval is 1h, it will be
+       floored to 2020-1-1 14:00.
+
+    2. If start_ts is not given, calculate it by going back limit * interval
+
+       For example if end_ts is 2020-1-2 00:00:00, interval is 4h and limit
+       is 3, start_ts will be:
+
+       2020-1-2 - (4h * 3) = 2020-1-1 12:00:00
+
+    3. If start_ts is given, ceil start_ts.
+
+    3. Day of start_dt is start_day, day of end_ts is end_day
+
+    4. Loop over days from start_day to end_day.
+
+    5. Try to get day_file, create it by calling create_day_file.
+
+    6. Accumulate kline data from day_files by excluding the records that are
+       not between start_ts and end_ts.
+
+    7. Return Klines.
+
+              0     4     8     12    16    20
+    Intervals \\.....\\.....\\.....\\.....\\.....\\
+              start_ts →\\...........\\← end_ts
+                   (ceil)→\\.....\\←(floor)
+
+    Note: These tests require CSV data files to be present.
+    They are skipped by default as test data may not be available.
+
+    >>> sts = datetime_to_timestamp(datetime(2020, 1, 1))  # doctest: +SKIP
+    >>> ets = datetime_to_timestamp(datetime(2020, 1, 1, 5))  # doctest: +SKIP
+    >>> klines = get_klines_from_day_files(None, 'BNBBTC', '1h', start_ts=sts, end_ts=ets, limit=1)  # doctest: +SKIP
+    >>> len(klines)  # doctest: +SKIP
+    1
+    """
+
+    interval_as_timedelta = timedelta(seconds=interval_to_seconds(interval))
+
+    if not end_ts:
+        end_ts = datetime_to_timestamp(datetime.now(UTC))
+    end_dt_orig = timestamp_to_datetime(end_ts)
+    end_dt = floor_dt(end_dt_orig, interval_as_timedelta)
+    logger.debug("End time snapped by %s: %s -> %s", interval, end_dt_orig, end_dt)
+
+    if start_ts:
+        start_dt_orig = timestamp_to_datetime(start_ts)
+        start_dt = ceil_dt(start_dt_orig, interval_as_timedelta)
+        logger.debug("Start time snapped by %s: %s -> %s", interval, start_dt_orig, start_dt)
+    else:
+        # If start time is not defined step back interval * limit hours to
+        # find start time of request.
+        start_dt = end_dt - (interval_as_timedelta * (limit - 1))
+        logger.debug("Start time calculated as: %s", start_dt)
+
+    start_day = floor_dt(start_dt, DAY_AS_TIMEDELTA)
+    end_day = floor_dt(end_dt, DAY_AS_TIMEDELTA)
+    day_dts = list(dt_range(start_day, end_day, DAY_AS_TIMEDELTA))
+
+    utc_now = datetime.now(UTC).replace(tzinfo=None)
+    today = floor_dt(utc_now, DAY_AS_TIMEDELTA)
+
+    results = []
+
+    for day_dt in day_dts:
+        file_path = get_day_file_path(symbol, interval, day_dt)
+
+        if not exists(file_path):
+            file_path = create_day_file(client, symbol, interval, day_dt)
+
+        lines = load_day_file(symbol, interval, day_dt, file_path)
+
+        if day_dt == today:
+            expected_num_of_lines = get_expected_num_of_lines_in_day_file(
+                day_dt, interval_as_timedelta, utc_now=utc_now
+            )
+
+            if len(lines) < expected_num_of_lines:  # Fetch from API again.
+                logger.debug(
+                    "Day file %s has %s records which are below expected %s",
+                    file_path,
+                    len(lines),
+                    expected_num_of_lines,
+                )
+
+                file_path = create_day_file(client, symbol, interval, day_dt)
+                load_day_file.delete(symbol, interval, day_dt, file_path)
+                lines = load_day_file(symbol, interval, day_dt, file_path)
+
+        for line in lines:
+            open_ts, close_ts = line[0], line[6]
+            open_dt = timestamp_to_datetime(open_ts)
+            if start_dt <= open_dt <= end_dt:
+                results.append(line)
+            # else: This is too much even for debug logs. But can be needed.
+            #   logger.debug('Ignored line between %s - %s', open_dt,
+            #   close_dt)
+    return [Kline.from_raw(k) for k in results[:limit]]
+
+
+def raise_binance_api_exception(status_code: int, code: int, msg: str) -> None:
+    """Helper to raise BinanceAPIException with correct signature for current library version."""
+    response = FakeResponse(status_code, {"code": code, "msg": msg})
+    raise BinanceAPIException(response, status_code, response.text)
+
+
+def binance_api_exception_on_missing_params(*required_params: str) -> Callable[[Callable[..., T]], Callable[..., T]]:
+    """Decorator that raises BinanceAPIException if required params are missing.
+
+    >>> def fun(a=None, b=None):
+    ...     print('OK')
+    >>> fun = binance_api_exception_on_missing_params('b')(fun)
+    >>> fun(a=True)  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+        ...
+    binance.exceptions.BinanceAPIException: ...Mandatory parameter b was not sent...
+    >>> fun(b=True)
+    OK
+    """
+
+    def inner(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> T:
+            for key in required_params:
+                if key not in kwargs:
+                    raise_binance_api_exception(
+                        400, -1102, f"Mandatory parameter {key} was not sent, was empty / null, or malformed."
+                    )
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return inner
+
+
+def assets_to_usdt(client: "CachedClient", assets: dict[str, Decimal]) -> Decimal:
+    """Convert asset holdings to total USDT value."""
+    total = Decimal(0.0)
+    for asset, count in assets.items():
+        if asset == "TWT":
+            continue
+        if asset == "USDT":
+            total += count
+        else:
+            symbol = f"{asset}USDT"
+            price = client.get_avg_price(symbol=symbol).get("price")
+            if price is None:
+                continue
+            total += Decimal(price) * count
+    return total
+
+
+class CachedClient:
+    """A caching proxy for Binance client that reads klines from local CSV files.
+
+    When client is provided, falls back to real API for missing data.
+    When client is None, works fully offline with default values.
+
+    >>> client = CachedClient()
+    >>> client.get_symbol_info('BTCUSDT')['filters'][0]['filterType']
+    'LOT_SIZE'
+    """
+
+    # Default symbol info for offline mode
+    DEFAULT_SYMBOL_INFO = {
+        "baseAsset": "BTC",
+        "quoteAsset": "USDT",
+        "filters": [
+            {"filterType": "LOT_SIZE", "minQty": "0.00001000", "maxQty": "9000.00000000", "stepSize": "0.00001000"},
+            {
+                "filterType": "MARKET_LOT_SIZE",
+                "minQty": "0.00000000",
+                "maxQty": "1000.00000000",
+                "stepSize": "0.00000000",
+            },
+            {
+                "filterType": "NOTIONAL",
+                "minNotional": "5.00000000",
+                "applyMinToMarket": True,
+                "maxNotional": "9000000.00000000",
+                "applyMaxToMarket": False,
+            },
+        ],
+    }
+
+    def __init__(
+        self,
+        client: Client | None = None,
+        assets: dict[str, Decimal] | None = None,
+        commission_ratio: Decimal | None = None,
+    ) -> None:
+        self.client = client
+        self.assets: defaultdict[str, Decimal] = defaultdict(Decimal)
+        self.assets.update(assets or {})
+        self.commission_ratio = commission_ratio
+        self.__order_id = 0
+        self.positions: defaultdict[str, dict[str, float]] = defaultdict(
+            lambda: {
+                "avg_buy_price": 0,
+            }
+        )
+        self.order_history: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        self.asset_report: defaultdict[str, dict[str, int | float]] = defaultdict(
+            lambda: {
+                "successful_trades": 0,
+                "total_trades": 0,
+                "max_drawdown": 0,
+                "max_profit": 0,
+                "total_profit": 0,
+                "ratio": 0,
+            }
+        )
+        self.successful_trades = 0
+        self.total_trades = 0
+        logger.debug("Cached Binance client initialized.")
+
+    def __str__(self) -> str:
+        """Needed by cache library to create cache key."""
+        return "CachedClient"
+
+    @ring.lru()  # type: ignore[untyped-decorator]
+    def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Get symbol info from real client or return defaults for offline mode.
+
+        For offline mode, extracts base/quote assets from symbol name.
+        Assumes standard Binance symbol format (e.g., BTCUSDT, BNBBTC).
+        """
+        if self.client:
+            result: dict[str, Any] = self.client.get_symbol_info(symbol)
+            return result
+
+        # Parse symbol to extract base and quote assets
+        # Common quote assets in order of length (longest first to match correctly)
+        quote_assets = ["USDT", "BUSD", "USDC", "BTC", "ETH", "BNB"]
+        base_asset = symbol
+        quote_asset = "USDT"
+        for qa in quote_assets:
+            if symbol.endswith(qa):
+                base_asset = symbol[: -len(qa)]
+                quote_asset = qa
+                break
+
+        return {
+            **self.DEFAULT_SYMBOL_INFO,
+            "symbol": symbol,
+            "baseAsset": base_asset,
+            "quoteAsset": quote_asset,
+        }
+
+    @ring.lru()  # type: ignore[untyped-decorator]
+    def get_exchange_info(self) -> dict[str, Any]:
+        """Get exchange info from real client or return empty dict for offline mode."""
+        if self.client:
+            result: dict[str, Any] = self.client.get_exchange_info()
+            return result
+        return {}
+
+    @binance_api_exception_on_missing_params("symbol", "interval")
+    def get_klines(self, **params: Any) -> list[Kline]:
+        return get_klines_from_day_files(
+            self.client,
+            params["symbol"],
+            params["interval"],
+            start_ts=params.get("startTime"),
+            end_ts=params.get("endTime"),
+            limit=params.get("limit") or 500,
+        )
+
+    @binance_api_exception_on_missing_params("symbol")
+    def get_avg_price(self, interval: str = KLINE_INTERVAL_1MINUTE, **params: Any) -> dict[str, Any]:
+        """
+        Get average price by using latest 5minute kline.
+        TODO: Check if there's more reliable way to this. There's a little
+        difference between original API response and ours.
+
+        The test below compares real API vs cached client results.
+        Skipped by default as it requires API credentials and network access.
+
+        >>> c1 = get_binance_client()  # doctest: +SKIP
+        >>> c2 = get_binance_client(fake=True)  # doctest: +SKIP
+        >>> real_client_result = c1.get_avg_price(symbol='BNBUSDT')['price']  # doctest: +SKIP
+        >>> fake_client_result = c2.get_avg_price(symbol='BNBUSDT')['price']  # doctest: +SKIP
+        >>> abs(Decimal(fake_client_result) - Decimal(real_client_result)) < 1  # doctest: +SKIP
+        True
+        """
+
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(datetime.now(UTC).replace(tzinfo=None), interval_as_timedelta)
+        start_dt = end_dt - interval_as_timedelta
+        logger.debug("Calculating average price between %s - %s", start_dt, end_dt)
+        latest_klines = get_klines_from_day_files(
+            self.client,
+            params["symbol"],
+            interval,
+            start_ts=datetime_to_timestamp(start_dt),
+            end_ts=datetime_to_timestamp(end_dt),
+            limit=1,
+        )
+        try:
+            latest_kline = latest_klines[-1]
+        except IndexError:
+            return {"interval": interval, "price": None}
+        avg_price = (latest_kline.close + latest_kline.open) / 2
+        logger.debug(
+            "Average %s price of %s is %s (calculated from kline %s - %s)",
+            interval,
+            params["symbol"],
+            decimal_as_str(avg_price),
+            latest_kline.open_time,
+            latest_kline.close_time,
+        )
+        return {"interval": interval, "price": avg_price}
+
+    def get_asset_balance(self, asset: str, recvWindow: int | None = None) -> dict[str, str]:
+        """
+        >>> extra_params = {'assets': {'USDT': Decimal(100)}}
+        >>> client = get_binance_client(fake=True, extra_params=extra_params)
+        >>> client.get_asset_balance('USDT')
+        {'asset': 'USDT', 'free': '100.00000000', 'locked': '0.00000000'}
+
+        Locked: the amount of tokens that has been used in any outstanding
+        orders. Once the order terminates (either filled, canceled or
+        expired), the locked amount will decrease.
+        """
+        balance = self.assets.get(asset, Decimal(0))
+        return {"asset": asset, "free": decimal_as_str(balance), "locked": decimal_as_str(Decimal(0))}
+
+    def get_account(self) -> dict[str, Any]:
+        """Get account info from real client or return cached assets for offline mode."""
+        if self.client:
+            result: dict[str, Any] = self.client.get_account()
+            return result
+        # For offline mode, return assets as balances
+        balances = [{"asset": k, "free": str(v), "locked": "0"} for k, v in self.assets.items()]
+        return {"balances": balances}
+
+    @binance_api_exception_on_missing_params("symbol", "side", "type")
+    def create_order(self, **params: Any) -> dict[str, Any] | None:
+        """Create a simulated order for backtesting.
+
+        Note: This test requires CSV kline data to calculate avg price.
+        Skipped by default as test data may not be available.
+
+        >>> extra_params = {'assets': {'USDT': Decimal(100)}}  # doctest: +SKIP
+        >>> extra_params['commission_ratio'] = Decimal(0.001)  # doctest: +SKIP
+        >>> client = get_binance_client(fake=True, extra_params=extra_params)  # doctest: +SKIP
+        >>> order = client.create_order(symbol='BNBUSDT', side=SIDE_BUY, quantity=1, type=ORDER_TYPE_MARKET)  # doctest: +SKIP
+        >>> Decimal(client.get_asset_balance('USDT')['free']) < Decimal(100)  # doctest: +SKIP
+        True
+        >>> Decimal(client.get_asset_balance('BNB')['free']) > Decimal(0)  # doctest: +SKIP
+        True
+        """
+        if "newOrderRespType" in params and params["newOrderRespType"] is not ORDER_RESP_TYPE_RESULT:
+            raise_binance_api_exception(400, 666, "CachedClient only accepts RESULT as newOrderRespType")
+        if params["type"] is not ORDER_TYPE_MARKET:
+            raise_binance_api_exception(400, 666, "CachedClient only accepts MARKET as order type")
+        """
+        Quantity represents is base asset of symbol. For example if your
+        symbol is BNBUSDT, and quantity is 100, this means you want to buy
+        100BNB.
+
+        On the other hand we have quoteOrderQty which is represents quote
+        asset of the symbol. If our symbol is BNBBTC and quoteOrderQty is 100
+        this means I want to spend 100BTC to buy BNB.
+
+        One of these parameters must be given to call create_order method.
+        """
+        quantity = params.get("quantity")
+        quote_order_quantity = params.get("quoteOrderQty")
+
+        if not any([quantity, quote_order_quantity]):
+            raise_binance_api_exception(
+                400, -1102, "Param 'quantity' or 'quoteOrderQty' must be sent, but both were empty/null!"
+            )
+
+        symbol_info = self.get_symbol_info(params["symbol"])
+
+        base_asset = symbol_info["baseAsset"]
+        quote_asset = symbol_info["quoteAsset"]
+
+        # TODO: Method is too long. Can we split this method for BUY and
+        #       SELL side?
+
+        avg_price_result = self.get_avg_price(symbol=params["symbol"]).get("price")
+        if avg_price_result is None:
+            logger.debug("Average price calculation problem")
+            return None
+        price = Decimal(str(avg_price_result))
+        fee = Decimal(0)
+        commission = self.commission_ratio or Decimal(0)
+
+        if quantity:
+            quantity = Decimal(str(quantity))
+            quote_order_quantity = price * quantity
+            fee = quote_order_quantity * commission
+            quote_order_quantity -= fee
+            logger.debug("Calculated quote order quantity: %s", decimal_as_str(quote_order_quantity))
+        elif quote_order_quantity:
+            quote_order_quantity = Decimal(str(quote_order_quantity))
+            quantity = quote_order_quantity / price
+            fee = (quantity * commission) * price
+            quote_order_quantity -= fee
+            logger.debug("Calculated quantity: %s", decimal_as_str(quantity))
+        else:
+            quantity = Decimal(0)
+            quote_order_quantity = Decimal(0)
+
+        logger.debug("Calculated quote order fee: %s", decimal_as_str(fee))
+
+        base_asset_balance = Decimal(self.get_asset_balance(asset=base_asset)["free"])
+
+        quote_asset_balance = Decimal(self.get_asset_balance(asset=quote_asset)["free"])
+
+        if params["side"] == SIDE_BUY and quote_order_quantity > quote_asset_balance:
+            raise_binance_api_exception(400, -1102, f"You don't have enough {quote_asset}")
+
+        if params["side"] == SIDE_SELL and quantity > base_asset_balance:
+            raise_binance_api_exception(400, -1102, f"You don't have enough {base_asset}")
+
+        quantity_as_str = decimal_as_str(quantity)
+        now_as_utc = datetime.now(UTC)
+        transaction_time = datetime_to_timestamp(now_as_utc.replace(tzinfo=None))
+
+        result = {
+            "symbol": params["symbol"],
+            "orderId": self.__order_id,
+            "orderListId": -1,
+            "clientOrderId": "rBaDuImczsKfIrO8gSPI0S",
+            "transactTime": transaction_time,
+            "price": "0.00000000",
+            "origQty": quantity_as_str,
+            "executedQty": quantity_as_str,
+            "cummulativeQuoteQty": quote_order_quantity,
+            "status": "FILLED",
+            "timeInForce": "GTC",
+            "type": params["type"],
+            "side": params["side"],
+        }
+        if params["side"] == SIDE_BUY:
+            if self.assets[base_asset]:
+                self.positions[base_asset]["avg_buy_price"] = calculate_avg_buy_price(
+                    float(quantity),
+                    float(price),
+                    float(self.assets[base_asset]),
+                    self.positions[base_asset]["avg_buy_price"],
+                )
+            else:
+                self.positions[base_asset]["avg_buy_price"] = float(price)
+            self.order_history[params["symbol"]].append({"side": "buy", "open_time": now_as_utc, "quantity": quantity})
+            self.assets[base_asset] += quantity
+            self.assets[quote_asset] -= quote_order_quantity
+        else:
+            previous_asset_worth = Decimal(str(self.positions[base_asset]["avg_buy_price"])) * quantity
+            new_asset_worth = quote_order_quantity
+            diff = float(new_asset_worth - previous_asset_worth)
+            self.asset_report[base_asset]["total_profit"] += diff
+            if diff > 0:
+                self.successful_trades += 1
+                self.asset_report[base_asset]["successful_trades"] += 1
+                if diff > self.asset_report[base_asset]["max_profit"]:
+                    self.asset_report[base_asset]["max_profit"] = diff
+            if diff < 0:
+                if diff < self.asset_report[base_asset]["max_drawdown"]:
+                    self.asset_report[base_asset]["max_drawdown"] = diff
+            self.asset_report[base_asset]["total_trades"] += 1
+            self.total_trades += 1
+            logger.debug(
+                "Symbol: %s Buy Avg Price: %s Sell Price: %s",
+                params["symbol"],
+                self.positions[base_asset]["avg_buy_price"],
+                price,
+            )
+            self.asset_report[base_asset]["ratio"] = (
+                100 * self.asset_report[base_asset]["successful_trades"] / self.asset_report[base_asset]["total_trades"]
+            )
+            self.order_history[params["symbol"]].append({"side": "sell", "open_time": now_as_utc, "quantity": quantity})
+            self.positions[base_asset]["avg_buy_price"] = 0
+            self.assets[base_asset] -= quantity
+            self.assets[quote_asset] += quote_order_quantity
+        new_worth = assets_to_usdt(self, dict(self.assets))
+        logger.debug(
+            "Created order on %s: SM: %s, SD: %s, T: %s, Q: %s, QQ: %s, AvgP: %s, F: %s",
+            now_as_utc,
+            params["symbol"],
+            params["side"],
+            params["type"],
+            decimal_as_str(params.get("quantity", 0)),
+            decimal_as_str(params.get("quoteOrderQty", 0)),
+            decimal_as_str(price),
+            decimal_as_str(fee),
+        )
+        logger.debug(assets_to_str(self.assets, "Assets after operation: "))
+        self.__order_id += 1
+        try:
+            ratio = 100 * self.successful_trades / self.total_trades
+        except ZeroDivisionError:
+            ratio = 0
+        logger.info(
+            "On %s Total Worth: %s USDT Success Ratio: %s", now_as_utc, decimal_as_str(new_worth), ratio_as_str(ratio)
+        )
+        return result
+
+    def get_total_usdt(self) -> Decimal:
+        """Calculate total portfolio value in USDT."""
+        return assets_to_usdt(self, dict(self.assets))
+
+    def generate_order_chart(self, symbol: str, dt: datetime, interval: str, base_asset: str) -> None:
+        """Generate candlestick chart with buy/sell markers."""
+        interval_as_timedelta = interval_to_timedelta(interval)
+        end_dt = floor_dt(dt, interval_as_timedelta)
+        klines = self.get_klines(
+            symbol=symbol,
+            interval=interval,
+            startTime=datetime_to_timestamp(settings.indicator_warmup_start),
+            endTime=datetime_to_timestamp(end_dt),
+        )
+
+        if klines:
+            klines.pop(-1)  ## current kline not closed
+
+        file_path = get_day_file_path(symbol, interval, end_dt)
+        os.remove(file_path)
+        load_day_file.delete(symbol, interval, end_dt, file_path)
+
+        df = pd.DataFrame([k.model_dump() for k in klines])
+        df.set_index("open_time", inplace=True)
+        if not self.order_history[symbol]:
+            return
+        order_df = pd.DataFrame(self.order_history[symbol])
+        order_df.set_index("open_time", inplace=True)
+
+        def calculate_marker_price(row: "pd.Series[Any]") -> float | None:
+            if row["side"] == "buy":
+                return float(row["low"]) * 0.95
+            elif row["side"] == "sell":
+                return float(row["high"]) * 1.05
+            else:
+                return None
+
+        df = pd.concat([df, order_df], axis=1)
+
+        df["marker"] = df.apply(calculate_marker_price, axis=1)
+        mpf.plot(
+            df,
+            type="candle",
+            style="charles",
+            title=f"{symbol} chart",
+            ylabel=f"{base_asset}",
+            savefig=f"charts/{symbol}_{interval}.png",
+            figscale=5,
+            addplot=mpf.make_addplot(df["marker"], scatter=True, color="blue", marker="o", markersize=50),
+        )
+
+
+def get_binance_client(fake: bool = False, extra_params: dict[str, Any] | None = None) -> CachedClient:
+    """Get a Binance client.
+
+    Args:
+        fake: If True, returns a CachedClient that works offline with CSV files.
+              If False, returns a real Binance Client.
+        extra_params: Additional parameters for CachedClient (assets, commission_ratio).
+
+    Returns:
+        CachedClient for offline/backtest mode, or real Client for live trading.
+    """
+    if fake:
+        # For backtest/offline mode, no real client needed
+        return CachedClient(**extra_params or {})
+
+    # For live trading, create real client and wrap in CachedClient for kline caching
+    client = Client(settings.binance_api_key, settings.binance_secret_key)
+    return CachedClient(client, **extra_params or {})
+</file>
+
+<file path="jarvis/logging.py">
+"""Logging configuration for the Jarvis trading system."""
+
+import logging
+from logging.handlers import RotatingFileHandler
+from os.path import isfile
+from pathlib import Path
+
+
+def get_logger(filename: str = "logs/backtest.log") -> logging.Logger:
+    _logger = logging.getLogger("jarvis")
+
+    # Prevent adding handlers multiple times
+    if _logger.handlers:
+        return _logger
+
+    _logger.propagate = False
+    _logger.setLevel(logging.DEBUG)
+
+    # Ensure logs directory exists
+    log_path = Path(filename)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    file_handler = RotatingFileHandler(filename, mode="a", backupCount=5)
+    if isfile(filename):
+        file_handler.doRollover()
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter("%(levelname)s: %(funcName)s : %(message)s"))
+
+    _logger.addHandler(file_handler)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(logging.Formatter("%(message)s"))
+    _logger.addHandler(stream_handler)
+    return _logger
+
+
+logger = get_logger()
+</file>
+
+<file path="jarvis/models.py">
+"""Data models for the Jarvis trading system."""
+
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel
+
+from jarvis.utils import timestamp_to_datetime
+
+
+class Kline(BaseModel):
+    """Binance kline (candlestick) data.
+
+    >>> raw = [
+    ...     1499040000000, "0.01634790", "0.80000000", "0.01575800",
+    ...     "0.01577100", "148976.11427815", 1499644799999, "2434.19055334",
+    ...     308, "1756.87402397", "28.46694368", "17928899.62484339"
+    ... ]
+    >>> kline = Kline.from_raw(raw)
+    >>> kline.open_time
+    datetime.datetime(2017, 7, 3, 0, 0)
+    >>> kline.open
+    Decimal('0.01634790')
+    >>> kline.volume
+    Decimal('148976.11427815')
+    >>> kline.num_of_trades
+    308
+    """
+
+    open_time: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal
+    close_time: datetime
+    quote_asset_volume: Decimal
+    num_of_trades: int
+    taker_buy_base_asset_volume: Decimal
+    taker_buy_quote_asset_volume: Decimal
+    ignore: Decimal
+
+    @classmethod
+    def from_raw(cls, raw: list[Any]) -> "Kline":
+        """Create Kline from raw Binance API response list."""
+        return cls(
+            open_time=timestamp_to_datetime(raw[0]),
+            open=Decimal(raw[1]),
+            high=Decimal(raw[2]),
+            low=Decimal(raw[3]),
+            close=Decimal(raw[4]),
+            volume=Decimal(raw[5]),
+            close_time=timestamp_to_datetime(raw[6]),
+            quote_asset_volume=Decimal(raw[7]),
+            num_of_trades=int(raw[8]),
+            taker_buy_base_asset_volume=Decimal(raw[9]),
+            taker_buy_quote_asset_volume=Decimal(raw[10]),
+            ignore=Decimal(raw[11]),
+        )
+
+
+class Color(Enum):
+    RED = "RED"
+    GREEN = "GREEN"
+
+
+class ActionType(Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+    STAY = "STAY"
+    ERR = "ERR"
+
+
+@dataclass
+class Position:
+    """Represents a trading position for a symbol.
+
+    >>> pos = Position(symbol='BTCUSDT', spent=Decimal('100'), amount=Decimal('0.01'))
+    >>> pos.symbol
+    'BTCUSDT'
+    >>> pos.spent
+    Decimal('100')
+    """
+
+    symbol: str
+    spent: Decimal
+    amount: Decimal
+
+
+class FakeResponse:
+    """Fake HTTP response for simulating Binance API errors.
+
+    >>> resp = FakeResponse(400, {'code': -1102, 'msg': 'error'})
+    >>> resp.status_code
+    400
+    >>> resp.json()
+    {'code': -1102, 'msg': 'error'}
+    """
+
+    def __init__(self, status_code: int, _dict: dict[str, Any]) -> None:
+        self.status_code = status_code
+        self._dict = _dict
+        self.text = str(_dict)
+
+    def json(self) -> dict[str, Any]:
+        return self._dict
+</file>
+
+<file path="jarvis/settings.py">
+"""Application settings for the Jarvis trading system."""
+
+import os
+from datetime import datetime
+from decimal import Decimal
+from functools import cache
+
+import requests
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from jarvis.logging import logger
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=os.environ.get("ENV_FILE", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    binance_api_key: str | None = None
+    binance_secret_key: str | None = None
+    debug: bool = False
+    sentry_dsn: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_dm_id: str | None = None
+    telegram_gm_id: str | None = None
+    telegram_gm_prefix: str = ""
+
+    # Indicator warmup start date. Technical indicators (SuperTrend, VWMA, SMA) need
+    # historical data to "warm up" before producing valid signals. We fetch data from
+    # this date to ensure indicators have enough history. The data is cached both in
+    # memory (@ring.lru) and on disk (CSV files), so only the first run is slow.
+    indicator_warmup_start: datetime = Field(default=datetime(2023, 1, 1))
+
+    commission_ratio: Decimal = Decimal("0.001")
+    investment_ratio: Decimal = Decimal("0.2")
+
+
+@cache
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings()
+
+
+# Module-level settings instance
+settings = get_settings()
+
+
+def __notify(token: str, chat_id: str, message: str) -> dict[str, object]:
+    """Send a message via Telegram bot API."""
+    send_text = (
+        "https://api.telegram.org/bot"
+        + token
+        + "/sendMessage?chat_id="
+        + str(chat_id)
+        + "&parse_mode=Markdown&text="
+        + str(message)
+    )
+    response = requests.get(send_text)
+    result: dict[str, object] = response.json()
+    return result
+
+
+def notify(message: str) -> None:
+    """Send notification to configured Telegram channels."""
+    if not settings.telegram_bot_token:
+        return
+    if settings.telegram_dm_id:
+        __notify(settings.telegram_bot_token, settings.telegram_dm_id, message)
+    if settings.telegram_gm_id:
+        __notify(settings.telegram_bot_token, settings.telegram_gm_id, settings.telegram_gm_prefix + message)
+    logger.debug("Sent telegram message:\n%s", message)
+</file>
+
+<file path="jarvis/utils.py">
+"""Utility functions for the Jarvis trading system."""
+
+import calendar
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Any, TypeVar
+
+from binance.helpers import interval_to_milliseconds
+
+T = TypeVar("T")
+
+DAY_AS_TIMEDELTA = timedelta(days=1)
+
+
+def interval_to_seconds(interval: str) -> int:
+    """Convert Binance interval strings to seconds
+
+    >>> interval_to_seconds('1h')
+    3600
+    >>> interval_to_seconds('4h')
+    14400
+    """
+    result = interval_to_milliseconds(interval)
+    if result is None:
+        raise ValueError(f"Invalid interval: {interval}")
+    return int(result / 1000)
+
+
+def interval_to_timedelta(interval: str) -> timedelta:
+    """Convert Binance interval strings to timedelta objects.
+
+    >>> interval_to_timedelta('1h') == timedelta(hours=1)
+    True
+    """
+    return timedelta(seconds=interval_to_seconds(interval))
+
+
+def flatten_list_of_lists(lst: list[list[T]]) -> list[T]:
+    """
+    >>> l = [[1, 1], [2, 2]]
+    >>> flatten_list_of_lists(l)
+    [1, 1, 2, 2]
+    """
+    return [i for sl in lst for i in sl]
+
+
+def floor_dt(dt: datetime, delta: timedelta) -> datetime:
+    """
+    >>> dt = datetime(2020, 1, 1, 1, 34)
+    >>> floor_dt(dt, timedelta(hours=1))
+    datetime.datetime(2020, 1, 1, 1, 0)
+    >>> floor_dt(dt, timedelta(days=1))
+    datetime.datetime(2020, 1, 1, 0, 0)
+    """
+    q, r = divmod(dt - datetime.min, delta)
+    return (datetime.min + (q * delta)) if r else dt
+
+
+def floor_to_step(number: Decimal | float, step: Decimal | float) -> Decimal:
+    """
+    >>> floor_to_step(6, 5)
+    Decimal('5')
+    >>> floor_to_step(18, 5)
+    Decimal('15')
+    >>> floor_to_step(Decimal('0.123'), Decimal('0.01'))
+    Decimal('0.12')
+    """
+    return Decimal(int(Decimal(str(number)) / Decimal(str(step)))) * Decimal(str(step))
+
+
+def ceil_dt(dt: datetime, delta: timedelta) -> datetime:
+    """
+    >>> dt = datetime(2020, 1, 1, 1, 34)
+    >>> ceil_dt(dt, timedelta(hours=1))
+    datetime.datetime(2020, 1, 1, 2, 0)
+    """
+    q, r = divmod(dt - datetime.min, delta)
+    return (datetime.min + (q + 1) * delta) if r else dt
+
+
+def timestamp_to_datetime(ts: int) -> datetime:
+    """Convert timestamp with milliseconds to datetime (UTC, naive).
+    >>> timestamp_to_datetime(1577836800000)
+    datetime.datetime(2020, 1, 1, 0, 0)
+    """
+    return datetime.fromtimestamp(int(ts / 1000.0), tz=UTC).replace(tzinfo=None)
+
+
+def datetime_to_timestamp(dt: datetime) -> int:
+    """Convert datetime to timestamp with milliseconds.
+    >>> dt = datetime(2020, 1, 1, 0, 0, 0)
+    >>> datetime_to_timestamp(dt)
+    1577836800000
+    """
+    return int(calendar.timegm(dt.utctimetuple()) * 1000)
+
+
+def decimal_as_str(value: Decimal | float) -> str:
+    """
+    >>> decimal = Decimal('0.00000010')
+    >>> decimal
+    Decimal('1.0E-7')
+    >>> decimal_as_str(decimal)
+    '0.00000010'
+    """
+    return "%.8f" % value
+
+
+def ratio_as_str(ratio: float) -> str:
+    """Format ratio as percentage string with 2 decimal places.
+
+    >>> ratio_as_str(0.5)
+    '0.50'
+    >>> ratio_as_str(99.999)
+    '100.00'
+    """
+    return "%.2f" % ratio
+
+
+def num_of_intervals(start: datetime, end: datetime, delta: timedelta) -> int:
+    """Calculate number of intervals between two datetimes.
+
+    >>> start = datetime(2020, 1, 1, 0, 0)
+    >>> end = datetime(2020, 1, 1, 3, 0)
+    >>> num_of_intervals(start, end, timedelta(hours=1))
+    4
+    """
+    return int((end - start) / delta) + 1
+
+
+def dt_range(start: datetime, end: datetime, delta: timedelta) -> Iterator[datetime]:
+    """Yields datetime objects betweeen given dates by stepping given
+    seconds.
+
+    >>> dt1 = datetime(2020, 1, 1, 0)
+    >>> dt2 = datetime(2020, 1, 2, 3)
+    >>> dates = list(dt_range(dt1, dt2, timedelta(hours=1)))
+    >>> dates[0]
+    datetime.datetime(2020, 1, 1, 0, 0)
+    >>> dates[1]
+    datetime.datetime(2020, 1, 1, 1, 0)
+    >>> dates[2]
+    datetime.datetime(2020, 1, 1, 2, 0)
+
+    >>> dt1 = datetime(2020, 1, 1, 0)
+    >>> dt2 = datetime(2020, 1, 1, 0)
+    >>> dates = list(dt_range(dt1, dt2, timedelta(hours=1)))
+    >>> len(dates)
+    1
+    """
+    for idx in range(num_of_intervals(start, end, delta)):
+        yield start + (delta * idx)
+
+
+def order_to_str(order: dict[str, Any]) -> str:
+    """Format order dict as human-readable string.
+
+    >>> order = {'symbol': 'BTCUSDT', 'type': 'MARKET', 'side': 'BUY',
+    ...          'cummulativeQuoteQty': '100.00', 'origQty': '0.001'}
+    >>> order_to_str(order)
+    'Symbol: BTCUSDT Type: MARKET Side: BUY QuoteQty: 100.00 Qty: 0.001'
+    """
+    message = "Symbol: %s Type: %s Side: %s QuoteQty: %s Qty: %s"
+    return message % (order["symbol"], order["type"], order["side"], order["cummulativeQuoteQty"], order["origQty"])
+
+
+def assets_to_str(assets: dict[str, Decimal], prefix: str = "Current assets: ") -> str:
+    """Format asset holdings as human-readable string.
+
+    >>> assets_to_str({'USDT': Decimal('100.5'), 'BTC': Decimal('0.001')})
+    'Current assets: USDT: 100.50000000, BTC: 0.00100000'
+    >>> assets_to_str({'ETH': Decimal('2.5')}, prefix="Holdings: ")
+    'Holdings: ETH: 2.50000000'
+    """
+    params = flatten_list_of_lists([[k, decimal_as_str(v)] for k, v in assets.items()])
+    return (prefix + "%s: %s, " * len(assets))[:-2] % tuple(params)
+
+
+def calculate_avg_buy_price(quantity: float, price: float, last_quantity: float, last_avg_price: float) -> float:
+    """Calculate weighted average buy price after adding new position.
+
+    >>> calculate_avg_buy_price(1, 100, 0, 0)
+    100.0
+    >>> calculate_avg_buy_price(1, 200, 1, 100)
+    150.0
+    >>> calculate_avg_buy_price(2, 300, 1, 100)
+    233.33333333333334
+    """
+    return (price * quantity + last_quantity * last_avg_price) / (last_quantity + quantity)
+</file>
+
+<file path="strategies/BNBUSDT.json">
+{
+  "symbol": "BNBUSDT",
+  "interval": "1h",
+  "created_at": "2025-12-22T11:31:52.193718",
+  "updated_at": "2025-12-22T11:31:52.193894",
+  "training": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-06-01",
+    "generations": 30,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "performance": {
+    "fitness": 100.0,
+    "return_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "total_trades": 0,
+    "peak_equity": 100.0
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 180
+          }
+        },
+        "target": 51637.253103559175,
+        "weight": -0.30282078829558357
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 43
+          }
+        },
+        "target": 44618.197761748175,
+        "weight": -0.3563862338485573
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 18,
+            "slow": 35,
+            "signal": 5
+          }
+        },
+        "target": 348.74107904478166,
+        "weight": 0.9837144269792868
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 6200793.779665745,
+        "weight": 0.5936622416046768
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 50695.081613605216,
+        "weight": 0.4322658501429335
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 5
+          }
+        },
+        "target": 63.15010882551771,
+        "weight": -0.3926814613649736
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 37
+          }
+        },
+        "target": 55463.69959074626,
+        "weight": -0.22261079311261
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 5,
+            "slow": 40,
+            "signal": 10
+          }
+        },
+        "target": 563.8184086892273,
+        "weight": 0.29956969194169747
+      }
+    ],
+    "fitness": 100.0
+  }
+}
+</file>
+
+<file path="strategies/ETHUSDT.json">
+{
+  "symbol": "ETHUSDT",
+  "interval": "1h",
+  "created_at": "2025-12-22T11:30:54.784511",
+  "updated_at": "2025-12-22T11:30:54.784618",
+  "training": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-06-01",
+    "generations": 30,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "performance": {
+    "fitness": 100.0,
+    "return_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "total_trades": 0,
+    "peak_equity": 100.0
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 25
+          }
+        },
+        "target": 47.51970016153885,
+        "weight": -0.0015650847330255235
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 74
+          }
+        },
+        "target": 45052.84419879911,
+        "weight": 0.5164793845417461
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 20
+          }
+        },
+        "target": 27.343504723228815,
+        "weight": 0.8798576286369322
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 11,
+            "slow": 20,
+            "signal": 10
+          }
+        },
+        "target": -418.1923279428353,
+        "weight": 0.21002044812723075
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 47753.06998898574,
+        "weight": -0.39751835454226025
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 149
+          }
+        },
+        "target": 40956.83461273292,
+        "weight": -0.7753906292709354
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 11
+          }
+        },
+        "target": 35.59054094318863,
+        "weight": 0.05521911942539237
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 8,
+            "slow": 23,
+            "signal": 7
+          }
+        },
+        "target": -266.0324426441549,
+        "weight": 0.5190994726152145
+      }
+    ],
+    "fitness": 100.0
+  }
+}
+</file>
+
+<file path="strategies/SOLUSDT.json">
+{
+  "symbol": "SOLUSDT",
+  "interval": "1h",
+  "created_at": "2025-12-22T11:31:22.457227",
+  "updated_at": "2025-12-22T11:31:22.457351",
+  "training": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-06-01",
+    "generations": 30,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "performance": {
+    "fitness": 100.0,
+    "return_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "total_trades": 0,
+    "peak_equity": 100.0
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 11,
+            "slow": 17,
+            "signal": 14
+          }
+        },
+        "target": 764.353076670249,
+        "weight": -0.1474361281800074
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 12
+          }
+        },
+        "target": 58.233913239621906,
+        "weight": -0.512942692637637
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 25
+          }
+        },
+        "target": 27.14831883128889,
+        "weight": 0.624346966841528
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 47
+          }
+        },
+        "target": 48076.30272551921,
+        "weight": 0.7167695668543594
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 156
+          }
+        },
+        "target": 50505.60078602847,
+        "weight": -0.48335399571024906
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 7,
+            "slow": 32,
+            "signal": 12
+          }
+        },
+        "target": 740.4177039124738,
+        "weight": 0.6379679644410328
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 50868.70554021521,
+        "weight": -0.6623936056861313
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 8460750.138960453,
+        "weight": 0.6666508253965435
+      }
+    ],
+    "fitness": 100.0
+  }
+}
+</file>
+
+<file path="strategies/XRPUSDT.json">
+{
+  "symbol": "XRPUSDT",
+  "interval": "1h",
+  "created_at": "2025-12-22T11:32:32.001768",
+  "updated_at": "2025-12-22T11:32:32.002185",
+  "training": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-06-01",
+    "generations": 30,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "performance": {
+    "fitness": 100.0,
+    "return_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "total_trades": 0,
+    "peak_equity": 100.0
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 11,
+            "slow": 36,
+            "signal": 14
+          }
+        },
+        "target": -976.7589217647667,
+        "weight": 0.7575705637941008
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 9,
+            "slow": 15,
+            "signal": 8
+          }
+        },
+        "target": -922.7131498969771,
+        "weight": 0.7757404784058632
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 15
+          }
+        },
+        "target": 68.8985215006395,
+        "weight": -0.009474273197981553
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 30
+          }
+        },
+        "target": 62.90543653599691,
+        "weight": -0.9174259742970419
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 9,
+            "slow": 30,
+            "signal": 6
+          }
+        },
+        "target": 981.4999121782129,
+        "weight": 0.36775413783073585
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 18,
+            "slow": 29,
+            "signal": 8
+          }
+        },
+        "target": -243.11859347123283,
+        "weight": 0.04568296692578344
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 192
+          }
+        },
+        "target": 43223.051089874745,
+        "weight": 0.1152259415369965
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 200
+          }
+        },
+        "target": 44407.06101819579,
+        "weight": -0.5881065730628801
+      }
+    ],
+    "fitness": 100.0
+  }
+}
+</file>
+
+<file path=".env.example">
+BINANCE_API_KEY=""
+BINANCE_SECRET_KEY=""
+
+TELEGRAM_DM_ID=999
+TELEGRAM_GM_ID=999
+TELEGRAM_GM_PREFIX=""
+TELEGRAM_BOT_TOKEN=""
+DEBUG=False
+</file>
+
+<file path="jarvis.py">
+#!/usr/bin/env python
+"""Jarvis CLI - Cryptocurrency trading automation system."""
+
+import argparse
+import doctest
+import os
+from datetime import datetime
+from decimal import Decimal
+from os.path import exists
+
+import sentry_sdk
+
+from jarvis import backtest, evolve, trade
+from jarvis.logging import logger
+from jarvis.settings import get_settings, settings
+
+
+def main() -> None:
+    """Main CLI entry point."""
+    import sys
+
+    this_module = sys.modules[__name__]
+
+    parser = argparse.ArgumentParser(
+        description="Example: "
+        "python jarvis.py -st 2020-01-01T00:00:00 -et "
+        "2020-12-01T00:00:00 -ba USDT -ta BTC ETH -i 1h"
+    )
+
+    parser.add_argument(
+        "-ep",
+        "--env-path",
+        default=".env",
+        type=str,
+        dest="env_path",
+        help="File that we can load environment variables from %(default)s",
+    )
+
+    subparsers = parser.add_subparsers(dest="subparser")
+
+    backtest_parser = subparsers.add_parser("backtest")
+    doctest_parser = subparsers.add_parser("doctest")
+    evolve_parser = subparsers.add_parser("evolve")
+    trade_parser = subparsers.add_parser("trade")
+
+    def dt_type(s: str) -> datetime:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S")
+
+    backtest_parser.add_argument(
+        "-ba",
+        dest="base_asset",
+        metavar="BASE_ASSET",
+        default="USDT",
+        type=str,
+        help="The base asset that you want to trade. Default: %(default)s",
+    )
+
+    backtest_parser.add_argument(
+        "-sa",
+        dest="starting_amount",
+        default=Decimal(100.0),
+        type=Decimal,
+        metavar="STARTING_AMOUNT",
+        help="Amount of base asset when you start testing. Default: %(default)s",
+    )
+
+    backtest_parser.add_argument(
+        "-ta",
+        dest="trade_assets",
+        nargs="+",
+        metavar="TRADE_ASSET",
+        help="List of assets that you want to trade against base asset.",
+        type=str,
+        required=True,
+    )
+
+    backtest_parser.add_argument(
+        "-st",
+        dest="start_dt",
+        default="2020-01-01T00:00:00",
+        type=dt_type,
+        metavar="START_TIME",
+        help="The time that trade will start. Default: %(default)s.",
+    )
+
+    backtest_parser.add_argument(
+        "-et",
+        dest="end_dt",
+        default="2020-12-01T00:00:00",
+        type=dt_type,
+        metavar="END_TIME",
+        help="The time that trade end. Default: %(default)s.",
+    )
+
+    backtest_parser.add_argument(
+        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval of klines to check."
+    )
+
+    backtest_parser.add_argument(
+        "-cr",
+        dest="commission_ratio",
+        default=Decimal("0.001"),
+        type=Decimal,
+        metavar="COMMISSION_RATIO",
+        help="Commission ratio of platform. Default: %(default)s",
+    )
+
+    backtest_parser.add_argument(
+        "-ir",
+        dest="investment_ratio",
+        default=Decimal("0.2"),
+        type=Decimal,
+        metavar="INVESTMENT_RATIO",
+        help="Investment ratio of platform. Default: %(default)s",
+    )
+
+    doctest_parser.add_argument(
+        "-v", dest="verbose", default=False, action="store_true", help="Gives verbose output when set."
+    )
+
+    # Evolve parser arguments
+    evolve_parser.add_argument(
+        "-ba",
+        dest="base_asset",
+        metavar="BASE_ASSET",
+        default="USDT",
+        type=str,
+        help="The base asset that you want to trade. Default: %(default)s",
+    )
+
+    evolve_parser.add_argument(
+        "-ta",
+        dest="trade_assets",
+        nargs="+",
+        metavar="TRADE_ASSET",
+        help="List of assets that you want to trade against base asset.",
+        type=str,
+        required=True,
+    )
+
+    evolve_parser.add_argument(
+        "-st",
+        dest="start_dt",
+        default="2020-01-01T00:00:00",
+        type=dt_type,
+        metavar="START_TIME",
+        help="The time that trade will start. Default: %(default)s.",
+    )
+
+    evolve_parser.add_argument(
+        "-et",
+        dest="end_dt",
+        default="2020-12-01T00:00:00",
+        type=dt_type,
+        metavar="END_TIME",
+        help="The time that trade end. Default: %(default)s.",
+    )
+
+    evolve_parser.add_argument(
+        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval of klines to check."
+    )
+
+    evolve_parser.add_argument(
+        "-ps",
+        dest="population_size",
+        default=50,
+        type=int,
+        metavar="POPULATION_SIZE",
+        help="Number of individuals in population. Default: %(default)s",
+    )
+
+    evolve_parser.add_argument(
+        "-g",
+        dest="generations",
+        default=100,
+        type=int,
+        metavar="GENERATIONS",
+        help="Number of generations to evolve. Default: %(default)s",
+    )
+
+    evolve_parser.add_argument(
+        "-r",
+        dest="rules_per_individual",
+        default=5,
+        type=int,
+        metavar="RULES",
+        help="Number of rules per individual. Default: %(default)s",
+    )
+
+    evolve_parser.add_argument(
+        "-sa",
+        dest="starting_amount",
+        default=Decimal(100.0),
+        type=Decimal,
+        metavar="STARTING_AMOUNT",
+        help="Amount of base asset when you start testing. Default: %(default)s",
+    )
+
+    evolve_parser.add_argument(
+        "-cr",
+        dest="commission_ratio",
+        default=Decimal("0.001"),
+        type=Decimal,
+        metavar="COMMISSION_RATIO",
+        help="Commission ratio of platform. Default: %(default)s",
+    )
+
+    evolve_parser.add_argument(
+        "-ir",
+        dest="investment_ratio",
+        default=Decimal("0.2"),
+        type=Decimal,
+        metavar="INVESTMENT_RATIO",
+        help="Investment ratio of platform. Default: %(default)s",
+    )
+
+    evolve_parser.add_argument(
+        "-c",
+        dest="corpus_path",
+        default="corpus.json",
+        type=str,
+        metavar="CORPUS_PATH",
+        help="Path to save/load population corpus. Default: %(default)s",
+    )
+
+    trade_parser.add_argument(
+        "-ba",
+        dest="base_asset",
+        metavar="BASE_ASSET",
+        default="USDT",
+        type=str,
+        help="The base asset that you want to trade. Default: %(default)s",
+    )
+
+    trade_parser.add_argument(
+        "-ta",
+        dest="trade_assets",
+        nargs="+",
+        metavar="TRADE_ASSET",
+        help="List of assets that you want to trade against base asset.",
+        type=str,
+        required=True,
+    )
+
+    trade_parser.add_argument(
+        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval of klines to check."
+    )
+
+    trade_parser.add_argument(
+        "-ir",
+        dest="investment_ratio",
+        default=Decimal("0.2"),
+        type=Decimal,
+        metavar="INVESTMENT_RATIO",
+        help="Investment ratio of platform. Default: %(default)s",
+    )
+
+    kwargs = parser.parse_args()
+
+    # Load settings from env file if specified
+    if kwargs.env_path and exists(kwargs.env_path):
+        os.environ["ENV_FILE"] = kwargs.env_path
+        get_settings.cache_clear()
+        # Re-import settings after clearing cache
+        from jarvis import settings as new_settings
+
+        this_module.settings = new_settings  # type: ignore[attr-defined]
+        logger.info("Config loaded from %s", kwargs.env_path)
+
+    # Initialize Sentry
+    if settings.sentry_dsn:
+        sentry_sdk.init(settings.sentry_dsn, traces_sample_rate=1.0)
+
+    if kwargs.subparser == "doctest":
+        # Run doctests on all modules
+        import jarvis.client
+        import jarvis.models
+        import jarvis.signals.consecutive
+        import jarvis.utils
+
+        results = []
+        results.append(doctest.testmod(jarvis.utils, verbose=kwargs.verbose))
+        results.append(doctest.testmod(jarvis.models, verbose=kwargs.verbose))
+        results.append(doctest.testmod(jarvis.client, verbose=kwargs.verbose))
+        results.append(doctest.testmod(jarvis.signals.consecutive, verbose=kwargs.verbose))
+
+        total_failures = sum(r.failed for r in results)
+        total_tests = sum(r.attempted for r in results)
+        print(f"Ran {total_tests} doctests, {total_failures} failures")
+
+    elif kwargs.subparser == "backtest":
+        backtest(
+            kwargs.base_asset,
+            kwargs.starting_amount,
+            kwargs.trade_assets,
+            kwargs.interval,
+            kwargs.start_dt,
+            kwargs.end_dt,
+            kwargs.commission_ratio,
+            kwargs.investment_ratio,
+        )
+        print("Output written to backtest.log")
+    elif kwargs.subparser == "evolve":
+        evolve(
+            kwargs.base_asset,
+            kwargs.trade_assets,
+            kwargs.interval,
+            kwargs.start_dt,
+            kwargs.end_dt,
+            kwargs.population_size,
+            kwargs.generations,
+            kwargs.rules_per_individual,
+            kwargs.starting_amount,
+            kwargs.commission_ratio,
+            kwargs.investment_ratio,
+            kwargs.corpus_path,
+        )
+        print(f"Corpus saved to {kwargs.corpus_path}")
+    elif kwargs.subparser == "trade":
+        trade(kwargs.base_asset, kwargs.trade_assets, kwargs.interval, kwargs.investment_ratio)
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+</files>

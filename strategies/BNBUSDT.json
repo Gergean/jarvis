@@ -1,0 +1,113 @@
+{
+  "symbol": "BNBUSDT",
+  "interval": "1h",
+  "created_at": "2025-12-22T11:03:19.448187",
+  "updated_at": "2025-12-22T11:03:19.448480",
+  "training": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-06-01",
+    "generations": 30,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "performance": {
+    "fitness": 100.0,
+    "return_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "total_trades": 0,
+    "peak_equity": 100.0
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 19,
+            "slow": 24,
+            "signal": 9
+          }
+        },
+        "target": -0.15350741639329657,
+        "weight": 0.6122093129110366
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 8,
+            "slow": 20,
+            "signal": 9
+          }
+        },
+        "target": 0.03612304283566625,
+        "weight": 0.6331821846323198
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 19
+          }
+        },
+        "target": 59.305969097917036,
+        "weight": -0.19358292608359173
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 9,
+            "slow": 36,
+            "signal": 5
+          }
+        },
+        "target": 0.14412643816489412,
+        "weight": 0.8803625004047206
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 66
+          }
+        },
+        "target": 90798.46417159475,
+        "weight": -0.8640143793685993
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 136
+          }
+        },
+        "target": 50555.01991338016,
+        "weight": -0.6913692403516736
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 2890500.043645142,
+        "weight": -0.842484968148828
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 15,
+            "slow": 29,
+            "signal": 11
+          }
+        },
+        "target": 0.35785557313396277,
+        "weight": 0.6864094190914964
+      }
+    ],
+    "fitness": 100.0
+  }
+}

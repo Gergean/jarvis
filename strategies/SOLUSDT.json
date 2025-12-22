@@ -1,0 +1,109 @@
+{
+  "symbol": "SOLUSDT",
+  "interval": "1h",
+  "created_at": "2025-12-22T11:02:38.483585",
+  "updated_at": "2025-12-22T11:02:38.483813",
+  "training": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-06-01",
+    "generations": 30,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "performance": {
+    "fitness": 100.0,
+    "return_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "total_trades": 0,
+    "peak_equity": 100.0
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 1266.7284398648487,
+        "weight": 0.09823489622730786
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 16
+          }
+        },
+        "target": 42902.64614004087,
+        "weight": -0.3237186133454433
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 5
+          }
+        },
+        "target": 68.0463438124122,
+        "weight": 0.29250258855575795
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 108
+          }
+        },
+        "target": 16718.176296082107,
+        "weight": -0.24292536413301846
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 12,
+            "slow": 38,
+            "signal": 13
+          }
+        },
+        "target": -0.6725435869333958,
+        "weight": -0.9554213280443009
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 130
+          }
+        },
+        "target": 81537.35429987629,
+        "weight": 0.7077099003253853
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 37777.25531629108,
+        "weight": 0.7064785993764346
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 6,
+            "slow": 26,
+            "signal": 5
+          }
+        },
+        "target": 0.6329822536988607,
+        "weight": 0.5191786210903344
+      }
+    ],
+    "fitness": 100.0
+  }
+}

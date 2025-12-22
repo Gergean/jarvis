@@ -3,12 +3,22 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from os.path import isfile
+from pathlib import Path
 
 
 def get_logger(filename: str = "logs/backtest.log") -> logging.Logger:
-    _logger = logging.getLogger(__name__)
+    _logger = logging.getLogger("jarvis")
+
+    # Prevent adding handlers multiple times
+    if _logger.handlers:
+        return _logger
+
     _logger.propagate = False
     _logger.setLevel(logging.DEBUG)
+
+    # Ensure logs directory exists
+    log_path = Path(filename)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     file_handler = RotatingFileHandler(filename, mode="a", backupCount=5)
     if isfile(filename):

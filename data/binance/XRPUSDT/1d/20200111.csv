@@ -1,2 +1,3 @@
-Open Time,Open,High,Low,Close,Volume,Close Time,Quote Asset Volume,Number of trades,Taker Buy Base Asset Volume,Taker Buy Quote Asset volume
-1578700800000,0.21277000,0.21994000,0.20852000,0.21121000,119237732.20000000,1578787199999,25532572.23901500,85400,56878531.20000000,12179598.88955800,0
+version https://git-lfs.github.com/spec/v1
+oid sha256:1b2a5f8df38dc21fecb336421ce590978f485863376782a655a43ebb01111236
+size 296

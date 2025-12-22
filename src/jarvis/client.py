@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from functools import wraps
 from os import makedirs
-from os.path import dirname, exists, join
+from os.path import dirname, exists
+from pathlib import Path
 from typing import Any, TypeVar
 
 import mplfinance as mpf
@@ -44,14 +45,17 @@ from jarvis.utils import (
 
 T = TypeVar("T")
 
+# Project root directory (parent of src/)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
 
 def get_day_file_path(symbol: str, interval: str, day: datetime) -> str:
     """
-    >>> get_day_file_path('BTCUSDT', '1h', datetime(2020, 1, 1))
-    '../data/binance/BTCUSDT/1h/20200101.csv'
+    >>> get_day_file_path('BTCUSDT', '1h', datetime(2020, 1, 1)).endswith('data/binance/BTCUSDT/1h/20200101.csv')
+    True
     """
     file_name = day.strftime("%Y%m%d.csv")
-    return join("../", "data", "binance", symbol, interval, file_name)
+    return str(PROJECT_ROOT / "data" / "binance" / symbol / interval / file_name)
 
 
 def create_day_file(client: Client | None, symbol: str, interval: str, day: datetime) -> str:
@@ -225,8 +229,8 @@ def get_klines_from_day_files(
     end_day = floor_dt(end_dt, DAY_AS_TIMEDELTA)
     day_dts = list(dt_range(start_day, end_day, DAY_AS_TIMEDELTA))
 
-    utc_now = datetime.now(UTC)
-    today = floor_dt(utc_now.replace(tzinfo=None), DAY_AS_TIMEDELTA)
+    utc_now = datetime.now(UTC).replace(tzinfo=None)
+    today = floor_dt(utc_now, DAY_AS_TIMEDELTA)
 
     results = []
 
@@ -380,7 +384,7 @@ class CachedClient:
         )
         self.successful_trades = 0
         self.total_trades = 0
-        logger.info("Cached Binance client initialized.")
+        logger.debug("Cached Binance client initialized.")
 
     def __str__(self) -> str:
         """Needed by cache library to create cache key."""
