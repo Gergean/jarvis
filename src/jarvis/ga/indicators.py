@@ -190,7 +190,7 @@ class MACD(Indicator):
         new_slow = self.slow + random.randint(-3, 3)
         new_signal = self.signal + random.randint(-2, 2)
         new_fast = max(5, min(20, new_fast))
-        new_slow = max(20, min(40, new_slow))
+        new_slow = max(20, min(50, new_slow))  # Allow up to 50 for slow
         new_signal = max(5, min(15, new_signal))
         if new_fast >= new_slow:
             new_slow = new_fast + 5

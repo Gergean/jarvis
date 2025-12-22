@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import enlighten
 import pandas as pd
+from dateutil.relativedelta import relativedelta
 
 from jarvis.client import get_binance_client
 from jarvis.ga.strategy import Strategy, TestResult
@@ -55,9 +56,7 @@ def test(
     if end_dt is None:
         end_dt = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     if start_dt is None:
-        start_dt = end_dt.replace(month=end_dt.month - 3) if end_dt.month > 3 else end_dt.replace(
-            year=end_dt.year - 1, month=end_dt.month + 9
-        )
+        start_dt = end_dt - relativedelta(months=3)
 
     logger.info("Test period: %s to %s", start_dt.date(), end_dt.date())
     logger.info("Interval: %s", interval)
