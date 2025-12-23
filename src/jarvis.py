@@ -10,7 +10,7 @@ from os.path import exists
 
 import sentry_sdk
 
-from jarvis import download, test, trade, train
+from jarvis import download, test, trade, trade_with_strategies, train
 from jarvis.logging import logger
 from jarvis.settings import get_settings, settings
 
@@ -42,6 +42,7 @@ def main() -> None:
     download_parser = subparsers.add_parser("download")
     test_parser = subparsers.add_parser("test")
     trade_parser = subparsers.add_parser("trade")
+    trade_ga_parser = subparsers.add_parser("trade-ga")
     train_parser = subparsers.add_parser("train")
 
     def dt_type(s: str) -> datetime:
@@ -142,6 +143,55 @@ def main() -> None:
         help="Rules per individual. Default: %(default)s",
     )
 
+    train_parser.add_argument(
+        "-l",
+        dest="leverage",
+        default=1,
+        type=int,
+        metavar="LEVERAGE",
+        help="Futures leverage (1-10). Default: %(default)s",
+    )
+
+    train_parser.add_argument(
+        "--no-funding",
+        dest="funding_enabled",
+        action="store_false",
+        default=True,
+        help="Disable funding fee simulation.",
+    )
+
+    # Trade-GA parser arguments (trade with GA strategies)
+    trade_ga_parser.add_argument(
+        "-s",
+        dest="strategy_ids",
+        nargs="+",
+        metavar="STRATEGY_ID",
+        type=str,
+        required=True,
+        help="Strategy IDs to use (e.g., BTCUSDT_fe43f298 ETHUSDT_abc123)",
+    )
+
+    trade_ga_parser.add_argument(
+        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval. Default: %(default)s"
+    )
+
+    trade_ga_parser.add_argument(
+        "-ir",
+        dest="investment_ratio",
+        default=Decimal("0.2"),
+        type=Decimal,
+        metavar="INVESTMENT_RATIO",
+        help="Investment ratio. Default: %(default)s",
+    )
+
+    trade_ga_parser.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        default=False,
+        help="Dry run: show signals without executing trades.",
+    )
+
     # Test parser arguments
     test_parser.add_argument(
         "-s",
@@ -172,6 +222,23 @@ def main() -> None:
         type=dt_type,
         metavar="END_TIME",
         help="Test end date. Default: now.",
+    )
+
+    test_parser.add_argument(
+        "-l",
+        dest="leverage",
+        default=1,
+        type=int,
+        metavar="LEVERAGE",
+        help="Futures leverage (1-10). Default: %(default)s",
+    )
+
+    test_parser.add_argument(
+        "--no-funding",
+        dest="funding_enabled",
+        action="store_false",
+        default=True,
+        help="Disable funding fee simulation.",
     )
 
     # Download parser arguments
@@ -243,6 +310,14 @@ def main() -> None:
     elif kwargs.subparser == "trade":
         trade(kwargs.base_asset, kwargs.trade_assets, kwargs.interval, kwargs.investment_ratio)
 
+    elif kwargs.subparser == "trade-ga":
+        trade_with_strategies(
+            kwargs.strategy_ids,
+            kwargs.interval,
+            kwargs.investment_ratio,
+            dry_run=kwargs.dry_run,
+        )
+
     elif kwargs.subparser == "train":
         strategy, result = train(
             kwargs.symbol,
@@ -252,6 +327,8 @@ def main() -> None:
             kwargs.population_size,
             kwargs.generations,
             kwargs.rules_per_individual,
+            leverage=kwargs.leverage,
+            funding_enabled=kwargs.funding_enabled,
         )
         print(f"Strategy: {strategy.id}")
         print(f"Return: {result.return_pct:.2f}%")
@@ -263,6 +340,8 @@ def main() -> None:
             kwargs.interval,
             kwargs.start_dt,
             kwargs.end_dt,
+            leverage=kwargs.leverage,
+            funding_enabled=kwargs.funding_enabled,
         )
         print(f"Strategy: {result.strategy_id}")
         print(f"Return: {result.return_pct:.2f}%")

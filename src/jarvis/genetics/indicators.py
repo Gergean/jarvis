@@ -6,10 +6,9 @@ Uses TA-Lib (C-based) for performance when available, falls back to `ta` (pure P
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
-import pandas as pd
 
 # Try to import talib (C-based, fast), fall back to ta (pure Python, slow)
 try:
@@ -17,9 +16,20 @@ try:
 
     USE_TALIB = True
 except ImportError:
+    import pandas as pd
     import ta
 
     USE_TALIB = False
+
+
+class OHLCV(NamedTuple):
+    """OHLCV data as numpy arrays - much faster than DataFrame."""
+
+    open: np.ndarray
+    high: np.ndarray
+    low: np.ndarray
+    close: np.ndarray
+    volume: np.ndarray
 
 
 @dataclass
@@ -27,11 +37,11 @@ class Indicator(ABC):
     """Base class for all technical indicators."""
 
     @abstractmethod
-    def calculate(self, df: pd.DataFrame) -> float:
-        """Calculate the indicator value from OHLCV dataframe.
+    def calculate(self, ohlcv: OHLCV) -> float:
+        """Calculate the indicator value from OHLCV arrays.
 
         Args:
-            df: DataFrame with columns: open, high, low, close, volume
+            ohlcv: OHLCV named tuple with numpy arrays
 
         Returns:
             The calculated indicator value (single float).
@@ -67,13 +77,12 @@ class RSI(Indicator):
 
     period: int = 14
 
-    def calculate(self, df: pd.DataFrame) -> float:
+    def calculate(self, ohlcv: OHLCV) -> float:
         if USE_TALIB:
-            close = df["close"].to_numpy()
-            result = talib.RSI(close, timeperiod=self.period)
+            result = talib.RSI(ohlcv.close, timeperiod=self.period)
             return float(result[-1]) if not np.isnan(result[-1]) else 50.0
         else:
-            rsi = ta.momentum.RSIIndicator(df["close"], window=self.period)
+            rsi = ta.momentum.RSIIndicator(pd.Series(ohlcv.close), window=self.period)
             values = rsi.rsi()
             return float(values.iloc[-1]) if not values.empty else 50.0
 
@@ -100,13 +109,12 @@ class SMA(Indicator):
 
     period: int = 20
 
-    def calculate(self, df: pd.DataFrame) -> float:
+    def calculate(self, ohlcv: OHLCV) -> float:
         if USE_TALIB:
-            close = df["close"].to_numpy()
-            result = talib.SMA(close, timeperiod=self.period)
+            result = talib.SMA(ohlcv.close, timeperiod=self.period)
             return float(result[-1]) if not np.isnan(result[-1]) else 0.0
         else:
-            sma = ta.trend.SMAIndicator(df["close"], window=self.period)
+            sma = ta.trend.SMAIndicator(pd.Series(ohlcv.close), window=self.period)
             values = sma.sma_indicator()
             return float(values.iloc[-1]) if not values.empty else 0.0
 
@@ -133,13 +141,12 @@ class EMA(Indicator):
 
     period: int = 20
 
-    def calculate(self, df: pd.DataFrame) -> float:
+    def calculate(self, ohlcv: OHLCV) -> float:
         if USE_TALIB:
-            close = df["close"].to_numpy()
-            result = talib.EMA(close, timeperiod=self.period)
+            result = talib.EMA(ohlcv.close, timeperiod=self.period)
             return float(result[-1]) if not np.isnan(result[-1]) else 0.0
         else:
-            ema = ta.trend.EMAIndicator(df["close"], window=self.period)
+            ema = ta.trend.EMAIndicator(pd.Series(ohlcv.close), window=self.period)
             values = ema.ema_indicator()
             return float(values.iloc[-1]) if not values.empty else 0.0
 
@@ -168,16 +175,15 @@ class MACD(Indicator):
     slow: int = 26
     signal: int = 9
 
-    def calculate(self, df: pd.DataFrame) -> float:
+    def calculate(self, ohlcv: OHLCV) -> float:
         if USE_TALIB:
-            close = df["close"].to_numpy()
             macd_line, _, _ = talib.MACD(
-                close, fastperiod=self.fast, slowperiod=self.slow, signalperiod=self.signal
+                ohlcv.close, fastperiod=self.fast, slowperiod=self.slow, signalperiod=self.signal
             )
             return float(macd_line[-1]) if not np.isnan(macd_line[-1]) else 0.0
         else:
             macd = ta.trend.MACD(
-                df["close"],
+                pd.Series(ohlcv.close),
                 window_fast=self.fast,
                 window_slow=self.slow,
                 window_sign=self.signal,
@@ -223,16 +229,15 @@ class MACD_HIST(Indicator):
     slow: int = 26
     signal: int = 9
 
-    def calculate(self, df: pd.DataFrame) -> float:
+    def calculate(self, ohlcv: OHLCV) -> float:
         if USE_TALIB:
-            close = df["close"].to_numpy()
             _, _, macd_hist = talib.MACD(
-                close, fastperiod=self.fast, slowperiod=self.slow, signalperiod=self.signal
+                ohlcv.close, fastperiod=self.fast, slowperiod=self.slow, signalperiod=self.signal
             )
             return float(macd_hist[-1]) if not np.isnan(macd_hist[-1]) else 0.0
         else:
             macd = ta.trend.MACD(
-                df["close"],
+                pd.Series(ohlcv.close),
                 window_fast=self.fast,
                 window_slow=self.slow,
                 window_sign=self.signal,
@@ -276,8 +281,8 @@ class VOLUME(Indicator):
 
     period: int = 1  # Not used but kept for consistency
 
-    def calculate(self, df: pd.DataFrame) -> float:
-        return float(df["volume"].iloc[-1]) if not df.empty else 0.0
+    def calculate(self, ohlcv: OHLCV) -> float:
+        return float(ohlcv.volume[-1]) if len(ohlcv.volume) > 0 else 0.0
 
     def mutate(self) -> "VOLUME":
         return VOLUME(period=self.period)
@@ -300,8 +305,8 @@ class PRICE(Indicator):
 
     period: int = 1  # Not used but kept for consistency
 
-    def calculate(self, df: pd.DataFrame) -> float:
-        return float(df["close"].iloc[-1]) if not df.empty else 0.0
+    def calculate(self, ohlcv: OHLCV) -> float:
+        return float(ohlcv.close[-1]) if len(ohlcv.close) > 0 else 0.0
 
     def mutate(self) -> "PRICE":
         return PRICE(period=self.period)

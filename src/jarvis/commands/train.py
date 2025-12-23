@@ -1,19 +1,28 @@
-"""Train command for training a strategy for a single symbol."""
+"""Train command for training a futures strategy for a single symbol."""
 
 from datetime import datetime
 from decimal import Decimal
 
 import enlighten
-import pandas as pd
+import numpy as np
 from dateutil.relativedelta import relativedelta
 
 from jarvis.client import get_binance_client
-from jarvis.ga.individual import Individual
-from jarvis.ga.population import Population
-from jarvis.ga.strategy import Strategy, TestResult, TrainingConfig
+from jarvis.commands.download import download
+from jarvis.genetics.indicators import OHLCV
+from jarvis.genetics.individual import Individual
+from jarvis.genetics.population import Population
+from jarvis.genetics.strategy import Strategy, TestResult, TrainingConfig
 from jarvis.logging import logger
-from jarvis.models import ActionType
-from jarvis.utils import datetime_to_timestamp, dt_range, interval_to_timedelta
+from jarvis.models import (
+    DEFAULT_LEVERAGE,
+    FUNDING_FEE_RATE,
+    FUNDING_INTERVAL_HOURS,
+    FUTURES_TAKER_FEE,
+    ActionType,
+    PositionSide,
+)
+from jarvis.utils import datetime_to_timestamp
 
 
 def run_backtest(
@@ -22,49 +31,144 @@ def run_backtest(
     interval: str,
     start_dt: datetime,
     end_dt: datetime,
-    starting_amount: Decimal = Decimal("100"),
-    commission_ratio: Decimal = Decimal("0.001"),
+    starting_margin: Decimal = Decimal("100"),
+    commission_ratio: Decimal = FUTURES_TAKER_FEE,
     investment_ratio: Decimal = Decimal("0.2"),
+    leverage: int = DEFAULT_LEVERAGE,
+    funding_enabled: bool = True,
 ) -> dict:
-    """Run backtest for an individual and return metrics."""
-    base_asset = "USDT"
-    trade_asset = symbol[:-4] if symbol.endswith("USDT") else symbol[:-3]
+    """Run futures backtest for an individual and return metrics.
 
-    interval_td = interval_to_timedelta(interval)
-    all_dts = list(dt_range(start_dt, end_dt, interval_td))
+    Args:
+        individual: The trading strategy individual
+        symbol: Trading pair symbol
+        interval: Kline interval
+        start_dt: Backtest start datetime
+        end_dt: Backtest end datetime
+        starting_margin: Initial USDT margin
+        commission_ratio: Trading fee ratio
+        investment_ratio: Fraction of margin to use per trade
+        leverage: Futures leverage (1-10)
+        funding_enabled: Whether to simulate funding fees
 
+    Returns:
+        Dictionary with performance metrics
+    """
     client = get_binance_client(
         fake=True,
-        extra_params={"assets": {base_asset: starting_amount}, "commission_ratio": commission_ratio},
+        extra_params={"assets": {"USDT": starting_margin}, "commission_ratio": commission_ratio},
     )
 
-    assets: dict[str, Decimal] = {base_asset: starting_amount}
-    peak_equity = starting_amount
+    lookback = 200
+    all_klines = client.get_klines(
+        symbol=symbol,
+        interval=interval,
+        startTime=datetime_to_timestamp(start_dt),
+        endTime=datetime_to_timestamp(end_dt),
+        limit=50000,
+    )
+
+    if not all_klines:
+        return {
+            "return_pct": 0.0,
+            "max_drawdown_pct": 0.0,
+            "total_trades": 0,
+            "final_equity": float(starting_margin),
+            "peak_equity": float(starting_margin),
+            "total_funding_paid": 0.0,
+            "liquidation_count": 0,
+        }
+
+    # Convert to numpy arrays
+    n = len(all_klines)
+    open_arr = np.zeros(n, dtype=np.float64)
+    high_arr = np.zeros(n, dtype=np.float64)
+    low_arr = np.zeros(n, dtype=np.float64)
+    close_arr = np.zeros(n, dtype=np.float64)
+    volume_arr = np.zeros(n, dtype=np.float64)
+
+    for i, k in enumerate(all_klines):
+        open_arr[i] = float(k.open)
+        high_arr[i] = float(k.high)
+        low_arr[i] = float(k.low)
+        close_arr[i] = float(k.close)
+        volume_arr[i] = float(k.volume)
+
+    # Calculate funding interval in candles
+    interval_hours = {"1m": 1/60, "5m": 5/60, "15m": 0.25, "30m": 0.5, "1h": 1, "4h": 4, "1d": 24}.get(interval, 1)
+    funding_interval_candles = int(FUNDING_INTERVAL_HOURS / interval_hours)
+
+    # Initialize state
+    margin_balance = starting_margin
+    position_side = PositionSide.NONE
+    position_entry_price = Decimal(0)
+    position_quantity = Decimal(0)
+    position_margin = Decimal(0)
+
+    peak_equity = starting_margin
     max_drawdown_pct = 0.0
     total_trades = 0
+    total_funding_paid = Decimal(0)
+    liquidation_count = 0
+    last_funding_candle = 0
+    price = Decimal(0)
 
-    for dt in all_dts:
-        end_ts = datetime_to_timestamp(dt)
-        try:
-            klines = client.get_klines(symbol=symbol, interval=interval, limit=100, endTime=end_ts)
-            if not klines or len(klines) < 50:
+    for i in range(lookback, n):
+        start_idx = i - lookback + 1
+        end_idx = i + 1
+        ohlcv = OHLCV(
+            open=open_arr[start_idx:end_idx],
+            high=high_arr[start_idx:end_idx],
+            low=low_arr[start_idx:end_idx],
+            close=close_arr[start_idx:end_idx],
+            volume=volume_arr[start_idx:end_idx],
+        )
+        price = Decimal(str(close_arr[i]))
+
+        # Check liquidation if in position with leverage > 1
+        if position_side != PositionSide.NONE and leverage > 1:
+            liquidated = False
+            if position_side == PositionSide.LONG:
+                liq_price = position_entry_price * (1 - Decimal(1) / Decimal(leverage))
+                if price <= liq_price:
+                    liquidated = True
+            else:  # SHORT
+                liq_price = position_entry_price * (1 + Decimal(1) / Decimal(leverage))
+                if price >= liq_price:
+                    liquidated = True
+
+            if liquidated:
+                margin_balance -= position_margin
+                position_side = PositionSide.NONE
+                position_quantity = Decimal(0)
+                position_margin = Decimal(0)
+                liquidation_count += 1
                 continue
-        except Exception:
-            continue
 
-        df = pd.DataFrame([k.model_dump() for k in klines])
-        for col in ["open", "high", "low", "close", "volume"]:
-            if col in df.columns:
-                df[col] = df[col].astype(float)
+        # Apply funding fee
+        if funding_enabled and position_side != PositionSide.NONE:
+            candles_since_funding = i - last_funding_candle
+            if candles_since_funding >= funding_interval_candles:
+                num_funding_periods = candles_since_funding // funding_interval_candles
+                notional = position_quantity * price
+                funding_payment = notional * FUNDING_FEE_RATE * num_funding_periods
+                if position_side == PositionSide.LONG:
+                    margin_balance -= funding_payment
+                    total_funding_paid += funding_payment
+                else:
+                    margin_balance += funding_payment
+                    total_funding_paid -= funding_payment
+                last_funding_candle = i
 
-        price = Decimal(str(df["close"].iloc[-1]))
+        # Calculate current equity for drawdown tracking
+        equity = margin_balance
+        if position_side != PositionSide.NONE:
+            if position_side == PositionSide.LONG:
+                unrealized_pnl = position_quantity * (price - position_entry_price)
+            else:
+                unrealized_pnl = position_quantity * (position_entry_price - price)
+            equity += position_margin + unrealized_pnl
 
-        # Calculate equity
-        equity = assets.get(base_asset, Decimal("0"))
-        if assets.get(trade_asset, Decimal("0")) > 0:
-            equity += assets[trade_asset] * price
-
-        # Track drawdown
         if equity > peak_equity:
             peak_equity = equity
         if peak_equity > 0:
@@ -72,34 +176,58 @@ def run_backtest(
             if drawdown_pct > max_drawdown_pct:
                 max_drawdown_pct = drawdown_pct
 
-        # Execute signal
-        signal = individual.get_signal(df)
+        # Get signal with position awareness
+        signal = individual.get_signal(ohlcv, position_side)
 
-        if signal == ActionType.BUY:
-            quote_balance = assets.get(base_asset, Decimal("0"))
-            spend_amount = quote_balance * investment_ratio
-            if spend_amount > 0 and price > 0:
-                after_fee = spend_amount * (1 - commission_ratio)
-                buy_qty = after_fee / price
-                assets[base_asset] = quote_balance - spend_amount
-                assets[trade_asset] = assets.get(trade_asset, Decimal("0")) + buy_qty
+        if signal == ActionType.LONG and position_side == PositionSide.NONE:
+            margin_to_use = margin_balance * investment_ratio
+            if margin_to_use > 0 and price > 0:
+                position_size = (margin_to_use * leverage) / price
+                fee = position_size * price * commission_ratio
+                margin_balance -= fee
+                position_side = PositionSide.LONG
+                position_entry_price = price
+                position_quantity = position_size
+                position_margin = margin_to_use
+                margin_balance -= margin_to_use
                 total_trades += 1
 
-        elif signal == ActionType.SELL:
-            sell_qty = assets.get(trade_asset, Decimal("0"))
-            if sell_qty > 0 and price > 0:
-                proceeds = sell_qty * price
-                after_fee = proceeds * (1 - commission_ratio)
-                assets[trade_asset] = Decimal("0")
-                assets[base_asset] = assets.get(base_asset, Decimal("0")) + after_fee
+        elif signal == ActionType.SHORT and position_side == PositionSide.NONE:
+            margin_to_use = margin_balance * investment_ratio
+            if margin_to_use > 0 and price > 0:
+                position_size = (margin_to_use * leverage) / price
+                fee = position_size * price * commission_ratio
+                margin_balance -= fee
+                position_side = PositionSide.SHORT
+                position_entry_price = price
+                position_quantity = position_size
+                position_margin = margin_to_use
+                margin_balance -= margin_to_use
                 total_trades += 1
 
-    # Final equity
-    final_equity = assets.get(base_asset, Decimal("0"))
-    if assets.get(trade_asset, Decimal("0")) > 0:
-        final_equity += assets[trade_asset] * price
+        elif signal == ActionType.CLOSE and position_side != PositionSide.NONE:
+            if position_side == PositionSide.LONG:
+                pnl = position_quantity * (price - position_entry_price)
+            else:
+                pnl = position_quantity * (position_entry_price - price)
 
-    return_pct = float((final_equity - starting_amount) / starting_amount * 100)
+            fee = position_quantity * price * commission_ratio
+            margin_balance += position_margin + pnl - fee
+            position_side = PositionSide.NONE
+            position_quantity = Decimal(0)
+            position_margin = Decimal(0)
+            total_trades += 1
+
+    # Final equity calculation
+    final_equity = margin_balance
+    if position_side != PositionSide.NONE and price > 0:
+        if position_side == PositionSide.LONG:
+            unrealized_pnl = position_quantity * (price - position_entry_price)
+        else:
+            unrealized_pnl = position_quantity * (position_entry_price - price)
+        final_equity += position_margin + unrealized_pnl
+
+    return_pct = float((final_equity - starting_margin) / starting_margin * 100)
 
     return {
         "return_pct": return_pct,
@@ -107,6 +235,8 @@ def run_backtest(
         "total_trades": total_trades,
         "final_equity": float(final_equity),
         "peak_equity": float(peak_equity),
+        "total_funding_paid": float(total_funding_paid),
+        "liquidation_count": liquidation_count,
     }
 
 
@@ -118,13 +248,31 @@ def train(
     population_size: int = 100,
     generations: int = 30,
     rules_per_individual: int = 8,
-    starting_amount: Decimal = Decimal("100"),
-    commission_ratio: Decimal = Decimal("0.001"),
+    starting_margin: Decimal = Decimal("100"),
+    commission_ratio: Decimal = FUTURES_TAKER_FEE,
     investment_ratio: Decimal = Decimal("0.2"),
+    leverage: int = DEFAULT_LEVERAGE,
+    funding_enabled: bool = True,
     strategies_dir: str = "strategies",
     results_dir: str = "results",
 ) -> tuple[Strategy, TestResult]:
-    """Train a trading strategy for a single symbol.
+    """Train a futures trading strategy for a single symbol.
+
+    Args:
+        symbol: Trading pair symbol
+        interval: Kline interval
+        start_dt: Training start datetime
+        end_dt: Training end datetime
+        population_size: Number of individuals in population
+        generations: Number of generations to evolve
+        rules_per_individual: Number of rules per individual
+        starting_margin: Initial USDT margin
+        commission_ratio: Trading fee ratio
+        investment_ratio: Fraction of margin to use per trade
+        leverage: Futures leverage (1-10)
+        funding_enabled: Whether to simulate funding fees
+        strategies_dir: Directory to save strategies
+        results_dir: Directory to save results
 
     Returns:
         Tuple of (Strategy, TestResult) for the training run
@@ -135,9 +283,14 @@ def train(
     if start_dt is None:
         start_dt = end_dt - relativedelta(months=6)
 
-    logger.info("Training strategy for %s", symbol)
+    logger.info("Training futures strategy for %s", symbol)
     logger.info("Period: %s to %s", start_dt.date(), end_dt.date())
     logger.info("Population: %d, Generations: %d, Rules: %d", population_size, generations, rules_per_individual)
+    logger.info("Leverage: %dx, Funding: %s", leverage, "enabled" if funding_enabled else "disabled")
+
+    # Download data if not available
+    logger.info("Checking/downloading data...")
+    download([symbol], interval, start_dt, end_dt)
 
     bar_manager = enlighten.get_manager()
     gen_bar = bar_manager.counter(total=generations, desc=f"Training {symbol}", unit="gen")
@@ -147,7 +300,7 @@ def train(
     try:
         client = get_binance_client(
             fake=True,
-            extra_params={"assets": {"USDT": starting_amount}, "commission_ratio": commission_ratio},
+            extra_params={"assets": {"USDT": starting_margin}, "commission_ratio": commission_ratio},
         )
         end_ts = datetime_to_timestamp(end_dt)
         klines = client.get_klines(symbol=symbol, interval=interval, limit=1, endTime=end_ts)
@@ -160,19 +313,25 @@ def train(
     # Create initial population
     population = Population.create_random(population_size, rules_per_individual, price_hint=price_hint)
 
-    best_fitness = 0.0
+    best_fitness = float("-inf")
     best_individual = None
+    preloaded_data = None
+    buy_hold_return_pct = None
 
     for gen in range(generations):
-        # Evaluate fitness
-        population.evaluate_fitness(
+        # Evaluate fitness with futures logic
+        preloaded_data, buy_hold_return_pct = population.evaluate_fitness(
             symbol=symbol,
             interval=interval,
             start_dt=start_dt,
             end_dt=end_dt,
-            starting_amount=starting_amount,
+            starting_margin=starting_margin,
             commission_ratio=commission_ratio,
             investment_ratio=investment_ratio,
+            leverage=leverage,
+            funding_enabled=funding_enabled,
+            preloaded_data=preloaded_data,
+            buy_hold_return_pct=buy_hold_return_pct,
         )
 
         current_best = population.get_best()
@@ -184,21 +343,14 @@ def train(
         sorted_pop = sorted(population.individuals, key=lambda x: x.fitness, reverse=True)
         elites = sorted_pop[:3]
 
-        logger.info(
-            "Gen %d: best=%.2f, avg=%.2f",
-            gen,
-            current_best.fitness,
-            population.get_average_fitness(),
-        )
-        logger.info("  Elites:")
+        print(f"\nGen {gen}: best={current_best.fitness:.2f}, avg={population.get_average_fitness():.2f}")
+        print("  Elites:")
         for rank, elite in enumerate(elites, 1):
-            logger.info("    #%d fitness=%.2f rules=%d", rank, elite.fitness, len(elite.rules))
-            for rule in elite.rules:
-                logger.info("       %s", rule)
+            print(f"    #{rank} fitness={elite.fitness:.2f} rules={len(elite.rules)}")
 
         # Evolve (except last generation)
         if gen < generations - 1:
-            population = population.evolve()
+            population = population.evolve(price_hint=price_hint)
 
         gen_bar.update()
 
@@ -217,9 +369,11 @@ def train(
         interval,
         start_dt,
         end_dt,
-        starting_amount,
+        starting_margin,
         commission_ratio,
         investment_ratio,
+        leverage,
+        funding_enabled,
     )
 
     # Create strategy
@@ -266,6 +420,8 @@ def train(
     logger.info("Return: %.2f%%", metrics["return_pct"])
     logger.info("Max Drawdown: %.2f%%", metrics["max_drawdown_pct"])
     logger.info("Total Trades: %d", metrics["total_trades"])
+    logger.info("Funding Paid: %.2f USDT", metrics["total_funding_paid"])
+    logger.info("Liquidations: %d", metrics["liquidation_count"])
     logger.info("Rules: %d", len(best_individual.rules))
 
     return strategy, result

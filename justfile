@@ -2,13 +2,9 @@
 default:
     @just --list
 
-# Run doctests
-test *args:
-    uv run python src/jarvis.py doctest {{ args }}
-
-# Run doctests verbose
-test-v:
-    uv run python src/jarvis.py doctest -v
+# Install dependencies
+sync:
+    uv sync
 
 # Lint code
 lint:
@@ -22,17 +18,30 @@ fmt:
 typecheck:
     uv run mypy
 
-# Run all checks (lint, format check, typecheck, test)
-check: lint typecheck test
+# Run doctests
+doctest *args:
+    uv run python src/jarvis.py doctest {{ args }}
 
-# Run backtest
-backtest *args:
-    uv run python src/jarvis.py backtest {{ args }}
+# Run all checks (lint, typecheck, doctest)
+check: lint typecheck doctest
 
-# Run live trade
+# Download historical data
+download *args:
+    uv run python src/jarvis.py download {{ args }}
+
+# Train a GA strategy
+train *args:
+    uv run python src/jarvis.py train {{ args }}
+
+# Test a strategy (out-of-sample)
+test *args:
+    uv run python src/jarvis.py test {{ args }}
+
+# Trade with GA strategies (use --dry-run for simulation)
 trade *args:
-    uv run python src/jarvis.py trade {{ args }}
+    uv run python src/jarvis.py trade-ga {{ args }}
 
-# Install dependencies
-sync:
-    uv sync
+# Clean cache files
+clean:
+    rm -rf .mypy_cache .ruff_cache
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

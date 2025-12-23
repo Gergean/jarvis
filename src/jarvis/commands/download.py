@@ -99,7 +99,7 @@ def download(
                 for k in klines:
                     writer.writerow(k)
 
-        logger.info("  %s: %d klines, %d files", symbol, len(all_klines), len(by_day))
+        logger.info("  %s: %d klines, %d files -> %s", symbol, len(all_klines), len(by_day), symbol_dir)
         results[symbol] = len(all_klines)
 
     logger.info("Download complete")

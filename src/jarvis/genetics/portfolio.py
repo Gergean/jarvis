@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from jarvis.ga.strategy import Strategy
+from jarvis.genetics.strategy import Strategy
 from jarvis.models import ActionType
 from jarvis.utils import datetime_to_timestamp, dt_range, interval_to_timedelta
 
@@ -120,8 +120,7 @@ class Portfolio:
         elif self.allocation_strategy == "performance_based":
             # Weight by return percentage (higher return = higher weight)
             total_return = sum(
-                max(0.01, alloc.strategy.performance.return_pct) if alloc.strategy else 1.0
-                for alloc in self.symbols
+                max(0.01, alloc.strategy.performance.return_pct) if alloc.strategy else 1.0 for alloc in self.symbols
             )
             for alloc in self.symbols:
                 ret = alloc.strategy.performance.return_pct if alloc.strategy else 1.0
@@ -267,7 +266,9 @@ class Portfolio:
             if assets.get(trade_asset, Decimal("0")) > 0:
                 # Get last price
                 try:
-                    klines = client.get_klines(symbol=symbol, interval=interval, limit=1, endTime=datetime_to_timestamp(end_dt))
+                    klines = client.get_klines(
+                        symbol=symbol, interval=interval, limit=1, endTime=datetime_to_timestamp(end_dt)
+                    )
                     if klines:
                         price = Decimal(str(klines[-1].close))
                         final_equity += assets[trade_asset] * price

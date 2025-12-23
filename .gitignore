@@ -1,5 +1,20 @@
+# IDE
 .idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
 .venv/
-jarvis/.env
-jarvis/__pycache__/
-jarvis/backtest.log
+
+# Logs
+logs/*.log*
+
+# OS
+.DS_Store

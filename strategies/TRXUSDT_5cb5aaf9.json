@@ -1,0 +1,104 @@
+{
+  "id": "TRXUSDT_5cb5aaf9",
+  "symbol": "TRXUSDT",
+  "created_at": "2025-12-23T09:57:19.294322",
+  "training": {
+    "interval": "1h",
+    "start_date": "2025-06-22",
+    "end_date": "2025-12-22",
+    "generations": 1,
+    "population_size": 5,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 6,
+            "slow": 40,
+            "signal": 13
+          }
+        },
+        "target": 222.29310455718874,
+        "weight": -0.5077516853778619
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 177
+          }
+        },
+        "target": 48455.273818585614,
+        "weight": 0.8084081814362494
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 301468.9813693614,
+        "weight": -0.8248283721834009
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 10,
+            "slow": 39,
+            "signal": 7
+          }
+        },
+        "target": 489.09938306597735,
+        "weight": -0.09727897419442466
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 3197042.800592663,
+        "weight": 0.1843657252789208
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 758419.6360538383,
+        "weight": -0.1734715945637746
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 44307.103048051125,
+        "weight": 0.8554870314704948
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 17,
+            "slow": 25,
+            "signal": 13
+          }
+        },
+        "target": -674.0261613623744,
+        "weight": -0.5985864300774879
+      }
+    ],
+    "fitness": -2.9211166965888693
+  }
+}

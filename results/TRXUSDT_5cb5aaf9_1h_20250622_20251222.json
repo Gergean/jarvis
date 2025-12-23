@@ -1,0 +1,14 @@
+{
+  "strategy_id": "TRXUSDT_5cb5aaf9",
+  "symbol": "TRXUSDT",
+  "interval": "1h",
+  "start_date": "2025-06-22",
+  "end_date": "2025-12-22",
+  "result_type": "training",
+  "return_pct": 0.4900143626570916,
+  "max_drawdown_pct": 6.224232500119085,
+  "total_trades": 1,
+  "final_equity": 100.49001436265709,
+  "peak_equity": 101.67187863554757,
+  "created_at": "2025-12-23T09:57:19.294343"
+}

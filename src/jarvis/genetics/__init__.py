@@ -1,6 +1,6 @@
 """Genetic Algorithm based trading strategy optimizer."""
 
-from jarvis.ga.indicators import (
+from jarvis.genetics.indicators import (
     EMA,
     MACD,
     MACD_HIST,
@@ -10,9 +10,9 @@ from jarvis.ga.indicators import (
     VOLUME,
     Indicator,
 )
-from jarvis.ga.individual import Individual
-from jarvis.ga.population import Population
-from jarvis.ga.rule import Rule
+from jarvis.genetics.individual import Individual
+from jarvis.genetics.population import Population
+from jarvis.genetics.rule import Rule
 
 __all__ = [
     "Indicator",

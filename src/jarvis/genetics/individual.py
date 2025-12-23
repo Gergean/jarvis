@@ -5,10 +5,9 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
-import pandas as pd
-
-from jarvis.ga.rule import Rule
-from jarvis.models import ActionType
+from jarvis.genetics.indicators import OHLCV
+from jarvis.genetics.rule import Rule
+from jarvis.models import ActionType, PositionSide
 
 
 @dataclass
@@ -18,34 +17,61 @@ class Individual:
     Signal calculation:
     1. Calculate contribution from each rule: (value - target) * weight
     2. Sum all contributions
-    3. If total > 1: BUY
-       If total < -1: SELL
-       Otherwise: STAY
+    3. Position-aware thresholds:
+       - total > 1 and no position -> LONG
+       - total < -1 and no position -> SHORT
+       - total < -0.5 and in LONG -> CLOSE
+       - total > 0.5 and in SHORT -> CLOSE
+       - Otherwise -> STAY
     """
 
     rules: list[Rule] = field(default_factory=list)
     fitness: float = 0.0
 
-    def get_signal(self, df: pd.DataFrame) -> ActionType:
-        """Calculate trading signal from rules.
+    # Thresholds for signal generation
+    LONG_THRESHOLD = 1.0
+    SHORT_THRESHOLD = -1.0
+    CLOSE_THRESHOLD = 0.5
+
+    def get_signal(self, ohlcv: OHLCV, current_side: PositionSide = PositionSide.NONE) -> ActionType:
+        """Calculate trading signal from rules with position awareness.
 
         Args:
-            df: DataFrame with OHLCV data
+            ohlcv: OHLCV named tuple with numpy arrays
+            current_side: Current position direction (LONG, SHORT, or NONE)
 
         Returns:
-            ActionType.BUY, ActionType.SELL, or ActionType.STAY
+            ActionType.LONG, ActionType.SHORT, ActionType.CLOSE, or ActionType.STAY
         """
         if not self.rules:
             return ActionType.STAY
 
-        total = sum(rule.calculate_contribution(df) for rule in self.rules)
+        total = sum(rule.calculate_contribution(ohlcv) for rule in self.rules)
 
-        if total > 1:
-            return ActionType.BUY
-        elif total < -1:
-            return ActionType.SELL
-        else:
-            return ActionType.STAY
+        # No position - can open new
+        if current_side == PositionSide.NONE:
+            if total > self.LONG_THRESHOLD:
+                return ActionType.LONG
+            elif total < self.SHORT_THRESHOLD:
+                return ActionType.SHORT
+            else:
+                return ActionType.STAY
+
+        # In long position
+        elif current_side == PositionSide.LONG:
+            if total < -self.CLOSE_THRESHOLD:
+                return ActionType.CLOSE
+            else:
+                return ActionType.STAY
+
+        # In short position
+        elif current_side == PositionSide.SHORT:
+            if total > self.CLOSE_THRESHOLD:
+                return ActionType.CLOSE
+            else:
+                return ActionType.STAY
+
+        return ActionType.STAY
 
     def mutate(self, mutation_rate: float = 0.1) -> "Individual":
         """Return a mutated copy of this individual.

@@ -4,9 +4,7 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-import pandas as pd
-
-from jarvis.ga.indicators import Indicator, indicator_from_dict, random_indicator
+from jarvis.genetics.indicators import OHLCV, Indicator, indicator_from_dict, random_indicator
 
 
 @dataclass
@@ -24,18 +22,18 @@ class Rule:
     target: float
     weight: float
 
-    def calculate_contribution(self, df: pd.DataFrame) -> float:
+    def calculate_contribution(self, ohlcv: OHLCV) -> float:
         """Calculate this rule's contribution to the signal.
 
         Args:
-            df: DataFrame with OHLCV data
+            ohlcv: OHLCV named tuple with numpy arrays
 
         Returns:
             (indicator_value - target) * weight, or 0.0 if NaN
         """
         import math
 
-        value = self.indicator.calculate(df)
+        value = self.indicator.calculate(ohlcv)
         if math.isnan(value):
             return 0.0
         return (value - self.target) * self.weight

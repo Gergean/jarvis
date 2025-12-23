@@ -68,10 +68,17 @@ class Color(Enum):
 
 
 class ActionType(Enum):
-    BUY = "BUY"
-    SELL = "SELL"
-    STAY = "STAY"
-    ERR = "ERR"
+    LONG = "LONG"    # Open long position
+    SHORT = "SHORT"  # Open short position
+    CLOSE = "CLOSE"  # Close current position
+    STAY = "STAY"    # Keep current position
+    ERR = "ERR"      # Error state
+
+
+class PositionSide(Enum):
+    LONG = "LONG"
+    SHORT = "SHORT"
+    NONE = "NONE"
 
 
 @dataclass
@@ -88,6 +95,64 @@ class Position:
     symbol: str
     spent: Decimal
     amount: Decimal
+
+
+# Futures trading constants
+FUTURES_TAKER_FEE = Decimal("0.0004")  # 0.04%
+FUTURES_MAKER_FEE = Decimal("0.0002")  # 0.02%
+FUNDING_FEE_RATE = Decimal("0.0001")   # 0.01% per 8 hours
+FUNDING_INTERVAL_HOURS = 8
+DEFAULT_LEVERAGE = 1
+MAX_LEVERAGE = 10
+
+
+@dataclass
+class FuturesPosition:
+    """Represents a futures trading position.
+
+    >>> pos = FuturesPosition(
+    ...     symbol='BTCUSDT',
+    ...     side=PositionSide.LONG,
+    ...     entry_price=Decimal('50000'),
+    ...     quantity=Decimal('0.1'),
+    ...     margin=Decimal('500'),
+    ...     leverage=10
+    ... )
+    >>> pos.notional_value
+    Decimal('5000.0')
+    >>> pos.liquidation_price  # Long at 10x: ~10% drop
+    Decimal('45000.0')
+    """
+
+    symbol: str
+    side: PositionSide
+    entry_price: Decimal
+    quantity: Decimal  # Always positive
+    margin: Decimal    # USDT margin used
+    leverage: int
+
+    @property
+    def notional_value(self) -> Decimal:
+        """Position value = quantity * entry_price."""
+        return self.quantity * self.entry_price
+
+    @property
+    def liquidation_price(self) -> Decimal:
+        """Calculate approximate liquidation price based on leverage.
+
+        Simplified formula - real exchanges use more complex calculations.
+        """
+        if self.leverage <= 1:
+            # No liquidation at 1x
+            return Decimal("0") if self.side == PositionSide.LONG else Decimal("999999999")
+
+        margin_ratio = Decimal("1") / Decimal(self.leverage)
+        if self.side == PositionSide.LONG:
+            # Long liquidates when price drops by margin ratio
+            return self.entry_price * (1 - margin_ratio)
+        else:
+            # Short liquidates when price rises by margin ratio
+            return self.entry_price * (1 + margin_ratio)
 
 
 class FakeResponse:

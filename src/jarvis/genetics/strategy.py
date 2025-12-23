@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from jarvis.ga.individual import Individual
+from jarvis.genetics.individual import Individual
 
 
 @dataclass
@@ -202,7 +202,4 @@ class TestResult:
         return cls.from_dict(data)
 
     def __repr__(self) -> str:
-        return (
-            f"TestResult({self.strategy_id}, {self.interval}, "
-            f"{self.result_type}, return={self.return_pct:.1f}%)"
-        )
+        return f"TestResult({self.strategy_id}, {self.interval}, {self.result_type}, return={self.return_pct:.1f}%)"
