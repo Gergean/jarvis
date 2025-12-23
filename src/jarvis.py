@@ -10,7 +10,7 @@ from os.path import exists
 
 import sentry_sdk
 
-from jarvis import download, test, trade, trade_with_strategies, train
+from jarvis import download, paper_info, paper_init, paper_list, paper_trade, pinescript, test, trade, trade_with_strategies, train
 from jarvis.logging import logger
 from jarvis.settings import get_settings, settings
 
@@ -40,6 +40,8 @@ def main() -> None:
 
     doctest_parser = subparsers.add_parser("doctest")
     download_parser = subparsers.add_parser("download")
+    paper_parser = subparsers.add_parser("paper")
+    pinescript_parser = subparsers.add_parser("pinescript")
     test_parser = subparsers.add_parser("test")
     trade_parser = subparsers.add_parser("trade")
     trade_ga_parser = subparsers.add_parser("trade-ga")
@@ -50,6 +52,75 @@ def main() -> None:
 
     doctest_parser.add_argument(
         "-v", dest="verbose", default=False, action="store_true", help="Gives verbose output when set."
+    )
+
+    # Paper trading parser arguments
+    paper_subparsers = paper_parser.add_subparsers(dest="paper_command")
+
+    paper_init_parser = paper_subparsers.add_parser("init", help="Create a new paper wallet")
+    paper_init_parser.add_argument(
+        "wallet_id",
+        type=str,
+        help="Unique wallet identifier",
+    )
+    paper_init_parser.add_argument(
+        "-b",
+        "--balance",
+        dest="balance",
+        type=float,
+        default=100.0,
+        help="Initial balance in USD. Default: %(default)s",
+    )
+    paper_init_parser.add_argument(
+        "-c",
+        "--config",
+        dest="config",
+        action="append",
+        required=True,
+        help="Trading config as SYMBOL:INTERVAL (e.g., -c BTCUSDT:1h -c ETHUSDT:4h)",
+    )
+
+    paper_trade_parser = paper_subparsers.add_parser("trade", help="Run paper trading")
+    paper_trade_parser.add_argument(
+        "wallet_id",
+        type=str,
+        help="Wallet identifier",
+    )
+    paper_trade_parser.add_argument(
+        "-et",
+        dest="end_dt",
+        default=None,
+        type=dt_type,
+        metavar="END_TIME",
+        help="End date (for testing with historical data). Default: now.",
+    )
+
+    paper_info_parser = paper_subparsers.add_parser("info", help="Show wallet info and stats")
+    paper_info_parser.add_argument(
+        "wallet_id",
+        type=str,
+        help="Wallet identifier",
+    )
+
+    paper_list_parser = paper_subparsers.add_parser("list", help="List all paper wallets")
+
+    # Pinescript parser arguments
+    pinescript_parser.add_argument(
+        "-s",
+        dest="strategy_id",
+        metavar="STRATEGY_ID",
+        type=str,
+        required=True,
+        help="Strategy ID (e.g., ETHUSDT_5bdb12c7) or path to JSON file",
+    )
+
+    pinescript_parser.add_argument(
+        "-o",
+        dest="output_path",
+        metavar="OUTPUT_PATH",
+        type=str,
+        default=None,
+        help="Output path for Pine Script file. Default: strategies/{strategy_id}.pine",
     )
 
     trade_parser.add_argument(
@@ -193,6 +264,15 @@ def main() -> None:
         action="store_false",
         default=True,
         help="Disable walk-forward validation (not recommended).",
+    )
+
+    train_parser.add_argument(
+        "--seed",
+        dest="seed_strategy",
+        default=None,
+        type=str,
+        metavar="STRATEGY_PATH",
+        help="Path to strategy JSON to use as seed (e.g., strategies/ETHUSDT_abc123.json)",
     )
 
     # Trade-GA parser arguments (trade with GA strategies)
@@ -368,6 +448,7 @@ def main() -> None:
             train_period=kwargs.train_period,
             test_period=kwargs.test_period,
             step_period=kwargs.step_period,
+            seed_strategy=kwargs.seed_strategy,
         )
         print(f"Strategy: {strategy.id}")
         print(f"Return: {result.return_pct:.2f}%")
@@ -395,6 +476,40 @@ def main() -> None:
         )
         for symbol, count in result.items():
             print(f"{symbol}: {count} klines")
+
+    elif kwargs.subparser == "pinescript":
+        output_path = pinescript(kwargs.strategy_id, kwargs.output_path)
+        print(f"Pine Script saved: {output_path}")
+
+    elif kwargs.subparser == "paper":
+        if kwargs.paper_command == "init":
+            wallet = paper_init(kwargs.wallet_id, kwargs.balance, kwargs.config)
+            print(f"Wallet '{wallet['id']}' created with ${wallet['balance']} balance")
+            print(f"Config: {wallet['config']}")
+
+        elif kwargs.paper_command == "trade":
+            end_dt = kwargs.end_dt.replace(tzinfo=datetime.now().astimezone().tzinfo) if kwargs.end_dt else None
+            wallet = paper_trade(kwargs.wallet_id, end_dt=end_dt)
+            print(f"Balance: ${wallet['balance']:.2f}")
+            print(f"Open positions: {len(wallet['positions'])}")
+
+        elif kwargs.paper_command == "info":
+            stats = paper_info(kwargs.wallet_id)
+            print(f"Wallet: {stats['wallet_id']}")
+            print(f"Initial: ${stats['initial_balance']:.2f}")
+            print(f"Current: ${stats['current_balance']:.2f}")
+            print(f"PnL: ${stats['total_pnl']:.2f} ({stats['total_pnl_pct']:.2f}%)")
+            print(f"Trades: {stats['total_trades']} ({stats['win_rate']:.1f}% win rate)")
+            print(f"Open positions: {stats['open_positions']}")
+
+        elif kwargs.paper_command == "list":
+            wallets = paper_list()
+            if wallets:
+                print("Paper wallets:")
+                for w in wallets:
+                    print(f"  - {w}")
+            else:
+                print("No paper wallets found")
 
 
 if __name__ == "__main__":

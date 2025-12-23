@@ -124,6 +124,22 @@ class Strategy:
     def __repr__(self) -> str:
         return f"Strategy({self.id}, rules={len(self.individual.rules)})"
 
+    def to_pine_script(self) -> str:
+        """Generate Pine Script code for TradingView."""
+        return self.individual.to_pine_script(strategy_name=f"{self.symbol} GA Strategy")
+
+    def save_pine_script(self, directory: str | Path = "strategies") -> Path:
+        """Save strategy as Pine Script file."""
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+
+        filepath = directory / f"{self.id}.pine"
+
+        with open(filepath, "w") as f:
+            f.write(self.to_pine_script())
+
+        return filepath
+
 
 @dataclass
 class TestResult:

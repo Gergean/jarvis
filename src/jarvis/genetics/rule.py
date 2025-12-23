@@ -22,6 +22,9 @@ class Rule:
     target: float
     weight: float
 
+    # Normalization constant for contribution calculation
+    WEIGHT_SCALE = 100_000
+
     def calculate_contribution(self, ohlcv: OHLCV) -> float:
         """Calculate this rule's contribution to the signal.
 
@@ -29,14 +32,14 @@ class Rule:
             ohlcv: OHLCV named tuple with numpy arrays
 
         Returns:
-            (indicator_value - target) * weight, or 0.0 if NaN
+            (indicator_value - target) * weight / WEIGHT_SCALE, or 0.0 if NaN
         """
         import math
 
         value = self.indicator.calculate(ohlcv)
         if math.isnan(value):
             return 0.0
-        return (value - self.target) * self.weight
+        return (value - self.target) * self.weight / self.WEIGHT_SCALE
 
     def mutate(self) -> "Rule":
         """Return a mutated copy of this rule.
@@ -62,9 +65,12 @@ class Rule:
             return Rule(indicator=self.indicator, target=new_target, weight=self.weight)
 
         else:  # weight
-            # Mutate weight by a small amount
-            delta = random.uniform(-0.1, 0.1)
-            new_weight = self.weight + delta
+            # Mutate weight by a percentage (10-20% change)
+            factor = random.uniform(0.8, 1.2)
+            new_weight = self.weight * factor
+            # Occasionally flip sign
+            if random.random() < 0.1:
+                new_weight = -new_weight
             return Rule(indicator=self.indicator, target=self.target, weight=new_weight)
 
     @classmethod
@@ -98,7 +104,7 @@ class Rule:
             # Moving averages around current price (+/- 20%)
             target = random.uniform(0.8, 1.2) * price_hint
 
-        weight = random.uniform(-1, 1)
+        weight = random.uniform(-1_000_000, 1_000_000)
 
         return cls(indicator=indicator, target=target, weight=weight)
 

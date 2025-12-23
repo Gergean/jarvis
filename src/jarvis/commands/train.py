@@ -1,8 +1,11 @@
 """Train command for training a futures strategy for a single symbol."""
 
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+from functools import partial
+from multiprocessing import Pool, cpu_count
 
 import enlighten
 import numpy as np
@@ -27,99 +30,46 @@ from jarvis.utils import datetime_to_timestamp, interval_to_timedelta, parse_per
 
 
 @dataclass
-class WindowResult:
-    """Result of a single walk-forward window."""
+class WindowData:
+    """Preloaded data for a single test window."""
 
     window_num: int
-    train_start: datetime
-    train_end: datetime
     test_start: datetime
     test_end: datetime
-    train_return_pct: float
-    test_return_pct: float
-    test_max_drawdown_pct: float
-    test_trades: int
+    ohlcv_data: list[tuple[OHLCV, Decimal, int]]  # (ohlcv, price, candle_idx)
+    funding_interval_candles: int
 
 
-def run_backtest(
+@dataclass
+class WindowResult:
+    """Result of testing an individual on a single window."""
+
+    window_num: int
+    return_pct: float
+    max_drawdown_pct: float
+    trades: int
+    liquidated: bool
+
+
+def _run_backtest_on_preloaded(
     individual: Individual,
-    symbol: str,
-    interval: str,
-    start_dt: datetime,
-    end_dt: datetime,
+    ohlcv_data: list[tuple[OHLCV, Decimal, int]],
+    funding_interval_candles: int,
     starting_margin: Decimal = Decimal("100"),
     commission_ratio: Decimal = FUTURES_TAKER_FEE,
     investment_ratio: Decimal = Decimal("0.2"),
     leverage: int = DEFAULT_LEVERAGE,
     funding_enabled: bool = True,
 ) -> dict:
-    """Run futures backtest for an individual and return metrics.
-
-    Args:
-        individual: The trading strategy individual
-        symbol: Trading pair symbol
-        interval: Kline interval
-        start_dt: Backtest start datetime
-        end_dt: Backtest end datetime
-        starting_margin: Initial USDT margin
-        commission_ratio: Trading fee ratio
-        investment_ratio: Fraction of margin to use per trade
-        leverage: Futures leverage (1-10)
-        funding_enabled: Whether to simulate funding fees
-
-    Returns:
-        Dictionary with performance metrics
-    """
-    client = get_binance_client(
-        fake=True,
-        extra_params={"assets": {"USDT": starting_margin}, "commission_ratio": commission_ratio},
-    )
-
-    lookback = 200
-
-    # Need to fetch extra data for lookback period
-    lookback_delta = interval_to_timedelta(interval) * lookback
-    fetch_start = start_dt - lookback_delta
-
-    all_klines = client.get_klines(
-        symbol=symbol,
-        interval=interval,
-        startTime=datetime_to_timestamp(fetch_start),
-        endTime=datetime_to_timestamp(end_dt),
-        limit=50000,
-    )
-
-    if not all_klines:
+    """Run backtest on preloaded OHLCV data."""
+    if not ohlcv_data:
         return {
             "return_pct": 0.0,
             "max_drawdown_pct": 0.0,
             "total_trades": 0,
-            "final_equity": float(starting_margin),
-            "peak_equity": float(starting_margin),
-            "total_funding_paid": 0.0,
-            "liquidation_count": 0,
+            "liquidated": False,
         }
 
-    # Convert to numpy arrays
-    n = len(all_klines)
-    open_arr = np.zeros(n, dtype=np.float64)
-    high_arr = np.zeros(n, dtype=np.float64)
-    low_arr = np.zeros(n, dtype=np.float64)
-    close_arr = np.zeros(n, dtype=np.float64)
-    volume_arr = np.zeros(n, dtype=np.float64)
-
-    for i, k in enumerate(all_klines):
-        open_arr[i] = float(k.open)
-        high_arr[i] = float(k.high)
-        low_arr[i] = float(k.low)
-        close_arr[i] = float(k.close)
-        volume_arr[i] = float(k.volume)
-
-    # Calculate funding interval in candles
-    interval_hours = {"1m": 1 / 60, "5m": 5 / 60, "15m": 0.25, "30m": 0.5, "1h": 1, "4h": 4, "1d": 24}.get(interval, 1)
-    funding_interval_candles = max(1, int(FUNDING_INTERVAL_HOURS / interval_hours))
-
-    # Initialize state
     margin_balance = starting_margin
     position_side = PositionSide.NONE
     position_entry_price = Decimal(0)
@@ -129,59 +79,38 @@ def run_backtest(
     peak_equity = starting_margin
     max_drawdown_pct = 0.0
     total_trades = 0
-    total_funding_paid = Decimal(0)
-    liquidation_count = 0
     last_funding_candle = 0
     price = Decimal(0)
+    liquidated = False
 
-    for i in range(lookback, n):
-        start_idx = i - lookback + 1
-        end_idx = i + 1
-        ohlcv = OHLCV(
-            open=open_arr[start_idx:end_idx],
-            high=high_arr[start_idx:end_idx],
-            low=low_arr[start_idx:end_idx],
-            close=close_arr[start_idx:end_idx],
-            volume=volume_arr[start_idx:end_idx],
-        )
-        price = Decimal(str(close_arr[i]))
-
-        # Check liquidation if in position with leverage > 1
+    for ohlcv, price, candle_idx in ohlcv_data:
+        # Check liquidation
         if position_side != PositionSide.NONE and leverage > 1:
-            liquidated = False
             if position_side == PositionSide.LONG:
                 liq_price = position_entry_price * (1 - Decimal(1) / Decimal(leverage))
                 if price <= liq_price:
                     liquidated = True
-            else:  # SHORT
+                    break
+            else:
                 liq_price = position_entry_price * (1 + Decimal(1) / Decimal(leverage))
                 if price >= liq_price:
                     liquidated = True
-
-            if liquidated:
-                margin_balance -= position_margin
-                position_side = PositionSide.NONE
-                position_quantity = Decimal(0)
-                position_margin = Decimal(0)
-                liquidation_count += 1
-                continue
+                    break
 
         # Apply funding fee
         if funding_enabled and position_side != PositionSide.NONE:
-            candles_since_funding = i - last_funding_candle
+            candles_since_funding = candle_idx - last_funding_candle
             if candles_since_funding >= funding_interval_candles:
                 num_funding_periods = candles_since_funding // funding_interval_candles
                 notional = position_quantity * price
                 funding_payment = notional * FUNDING_FEE_RATE * num_funding_periods
                 if position_side == PositionSide.LONG:
                     margin_balance -= funding_payment
-                    total_funding_paid += funding_payment
                 else:
                     margin_balance += funding_payment
-                    total_funding_paid -= funding_payment
-                last_funding_candle = i
+                last_funding_candle = candle_idx
 
-        # Calculate current equity for drawdown tracking
+        # Calculate equity for drawdown
         equity = margin_balance
         if position_side != PositionSide.NONE:
             if position_side == PositionSide.LONG:
@@ -197,7 +126,7 @@ def run_backtest(
             if drawdown_pct > max_drawdown_pct:
                 max_drawdown_pct = drawdown_pct
 
-        # Get signal with position awareness
+        # Get signal
         signal = individual.get_signal(ohlcv, position_side)
 
         if signal == ActionType.LONG and position_side == PositionSide.NONE:
@@ -239,83 +168,182 @@ def run_backtest(
             position_margin = Decimal(0)
             total_trades += 1
 
-    # Final equity calculation
+    # Final equity
     final_equity = margin_balance
-    if position_side != PositionSide.NONE and price > 0:
+    if not liquidated and position_side != PositionSide.NONE and price > 0:
         if position_side == PositionSide.LONG:
             unrealized_pnl = position_quantity * (price - position_entry_price)
         else:
             unrealized_pnl = position_quantity * (position_entry_price - price)
         final_equity += position_margin + unrealized_pnl
 
-    return_pct = float((final_equity - starting_margin) / starting_margin * 100)
+    if liquidated:
+        return_pct = -100.0
+    else:
+        return_pct = float((final_equity - starting_margin) / starting_margin * 100)
 
     return {
         "return_pct": return_pct,
         "max_drawdown_pct": max_drawdown_pct,
         "total_trades": total_trades,
-        "final_equity": float(final_equity),
-        "peak_equity": float(peak_equity),
-        "total_funding_paid": float(total_funding_paid),
-        "liquidation_count": liquidation_count,
+        "liquidated": liquidated,
     }
 
 
-def _train_single_window(
-    symbol: str,
-    interval: str,
-    train_start: datetime,
-    train_end: datetime,
-    population_size: int,
-    generations: int,
-    rules_per_individual: int,
+def _evaluate_individual_on_windows(
+    individual: Individual,
+    windows: list[WindowData],
     starting_margin: Decimal,
     commission_ratio: Decimal,
     investment_ratio: Decimal,
     leverage: int,
     funding_enabled: bool,
-    price_hint: float | None,
-    bar_manager: enlighten.Manager,
-    window_label: str,
-) -> Individual:
-    """Train on a single window and return the best individual."""
-    population = Population.create_random(population_size, rules_per_individual, price_hint=price_hint)
+) -> tuple[float, list[WindowResult]]:
+    """Evaluate an individual across all windows.
 
-    gen_bar = bar_manager.counter(total=generations, desc=window_label, unit="gen", leave=False)
+    Returns:
+        Tuple of (fitness, list of window results)
+        fitness = sum(returns) - sum(drawdowns)
+        If any window has liquidation, fitness = 0
+    """
+    results = []
+    total_return = 0.0
+    total_drawdown = 0.0
+    any_liquidation = False
 
-    best_fitness = float("-inf")
-    best_individual = None
-    preloaded_data = None
-    buy_hold_return_pct = None
-
-    for gen in range(generations):
-        preloaded_data, buy_hold_return_pct = population.evaluate_fitness(
-            symbol=symbol,
-            interval=interval,
-            start_dt=train_start,
-            end_dt=train_end,
+    for window in windows:
+        metrics = _run_backtest_on_preloaded(
+            individual=individual,
+            ohlcv_data=window.ohlcv_data,
+            funding_interval_candles=window.funding_interval_candles,
             starting_margin=starting_margin,
             commission_ratio=commission_ratio,
             investment_ratio=investment_ratio,
             leverage=leverage,
             funding_enabled=funding_enabled,
-            preloaded_data=preloaded_data,
-            buy_hold_return_pct=buy_hold_return_pct,
         )
 
-        current_best = population.get_best()
-        if current_best.fitness > best_fitness:
-            best_fitness = current_best.fitness
-            best_individual = current_best
+        result = WindowResult(
+            window_num=window.window_num,
+            return_pct=metrics["return_pct"],
+            max_drawdown_pct=metrics["max_drawdown_pct"],
+            trades=metrics["total_trades"],
+            liquidated=metrics["liquidated"],
+        )
+        results.append(result)
 
-        if gen < generations - 1:
-            population = population.evolve(price_hint=price_hint)
+        if result.liquidated:
+            any_liquidation = True
+        else:
+            total_return += result.return_pct
+            total_drawdown += result.max_drawdown_pct
 
-        gen_bar.update()
+    # Liquidation in any window = fitness 0
+    if any_liquidation:
+        fitness = 0.0
+    else:
+        fitness = total_return - total_drawdown
 
-    gen_bar.close()
+    return fitness, results
 
-    return best_individual if best_individual else population.get_best()
+
+# Global variable to hold window data for parallel workers
+_parallel_window_data: list[WindowData] = []
+_parallel_params: dict = {}
+
+
+def _init_worker(window_data: list[WindowData], params: dict) -> None:
+    """Initialize worker process with shared data."""
+    global _parallel_window_data, _parallel_params
+    _parallel_window_data = window_data
+    _parallel_params = params
+
+
+def _evaluate_individual_parallel(individual: Individual) -> tuple[float, list[WindowResult]]:
+    """Evaluate a single individual - called by worker processes."""
+    return _evaluate_individual_on_windows(
+        individual=individual,
+        windows=_parallel_window_data,
+        starting_margin=_parallel_params["starting_margin"],
+        commission_ratio=_parallel_params["commission_ratio"],
+        investment_ratio=_parallel_params["investment_ratio"],
+        leverage=_parallel_params["leverage"],
+        funding_enabled=_parallel_params["funding_enabled"],
+    )
+
+
+def _preload_window_data(
+    symbol: str,
+    interval: str,
+    windows: list[tuple[datetime, datetime]],  # (test_start, test_end)
+    commission_ratio: Decimal,
+    starting_margin: Decimal,
+) -> list[WindowData]:
+    """Preload OHLCV data for all test windows."""
+    client = get_binance_client(
+        fake=True,
+        extra_params={"assets": {"USDT": starting_margin}, "commission_ratio": commission_ratio},
+    )
+
+    lookback = 200
+    lookback_delta = interval_to_timedelta(interval) * lookback
+
+    interval_hours = {"1m": 1 / 60, "5m": 5 / 60, "15m": 0.25, "30m": 0.5, "1h": 1, "4h": 4, "1d": 24}.get(interval, 1)
+    funding_interval_candles = max(1, int(FUNDING_INTERVAL_HOURS / interval_hours))
+
+    window_data_list = []
+
+    for i, (test_start, test_end) in enumerate(windows):
+        fetch_start = test_start - lookback_delta
+
+        all_klines = client.get_klines(
+            symbol=symbol,
+            interval=interval,
+            startTime=datetime_to_timestamp(fetch_start),
+            endTime=datetime_to_timestamp(test_end),
+            limit=50000,
+        )
+
+        ohlcv_data = []
+        if all_klines:
+            n = len(all_klines)
+            open_arr = np.zeros(n, dtype=np.float64)
+            high_arr = np.zeros(n, dtype=np.float64)
+            low_arr = np.zeros(n, dtype=np.float64)
+            close_arr = np.zeros(n, dtype=np.float64)
+            volume_arr = np.zeros(n, dtype=np.float64)
+
+            for j, k in enumerate(all_klines):
+                open_arr[j] = float(k.open)
+                high_arr[j] = float(k.high)
+                low_arr[j] = float(k.low)
+                close_arr[j] = float(k.close)
+                volume_arr[j] = float(k.volume)
+
+            for j in range(lookback, n):
+                start_idx = j - lookback + 1
+                end_idx = j + 1
+                ohlcv = OHLCV(
+                    open=open_arr[start_idx:end_idx],
+                    high=high_arr[start_idx:end_idx],
+                    low=low_arr[start_idx:end_idx],
+                    close=close_arr[start_idx:end_idx],
+                    volume=volume_arr[start_idx:end_idx],
+                )
+                price = Decimal(str(close_arr[j]))
+                ohlcv_data.append((ohlcv, price, j))
+
+        window_data_list.append(
+            WindowData(
+                window_num=i + 1,
+                test_start=test_start,
+                test_end=test_end,
+                ohlcv_data=ohlcv_data,
+                funding_interval_candles=funding_interval_candles,
+            )
+        )
+
+    return window_data_list
 
 
 def train(
@@ -337,11 +365,15 @@ def train(
     train_period: str = "3M",
     test_period: str = "1M",
     step_period: str = "1M",
+    seed_strategy: str | None = None,
 ) -> tuple[Strategy, TestResult]:
     """Train a futures trading strategy using walk-forward validation.
 
-    Walk-forward validation trains on rolling windows and tests on unseen data
-    to prevent overfitting.
+    The GA evolves a single strategy that performs well across ALL test windows.
+    Each individual is evaluated on every window, and fitness is calculated as:
+    fitness = sum(returns) - sum(drawdowns)
+
+    If any window causes liquidation, fitness = 0.
 
     Args:
         symbol: Trading pair symbol
@@ -359,7 +391,7 @@ def train(
         strategies_dir: Directory to save strategies
         results_dir: Directory to save results
         walk_forward: Use walk-forward validation (default: True)
-        train_period: Training period per window (e.g., "3M", "90d")
+        train_period: Training period - used only for window spacing
         test_period: Test period per window (e.g., "1M", "30d")
         step_period: Step size between windows (e.g., "1M", "30d")
 
@@ -367,11 +399,10 @@ def train(
         Tuple of (Strategy, TestResult) for the training run
     """
     # Parse periods to days
-    train_days = parse_period_to_days(train_period)
     test_days = parse_period_to_days(test_period)
     step_days = parse_period_to_days(step_period)
 
-    # Default dates: 1 year for walk-forward, 6 months for simple
+    # Default dates
     if end_dt is None:
         end_dt = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     if start_dt is None:
@@ -390,235 +421,225 @@ def train(
     if walk_forward:
         logger.info("-" * 60)
         logger.info("WALK-FORWARD VALIDATION")
-        logger.info(
-            "Train: %s (%d days) | Test: %s (%d days) | Step: %s (%d days)",
-            train_period,
-            train_days,
-            test_period,
-            test_days,
-            step_period,
-            step_days,
-        )
+        logger.info("Test: %s (%d days) | Step: %s (%d days)", test_period, test_days, step_period, step_days)
+        logger.info("Fitness = Σ(return) - Σ(drawdown) | Liquidation = 0")
 
     logger.info("=" * 60)
 
-    # Download data - include extra lookback period for indicators
+    # Calculate test windows
+    windows = []  # (test_start, test_end)
+    current_start = start_dt
+
+    while True:
+        test_end = current_start + timedelta(days=test_days)
+        if test_end > end_dt:
+            break
+        windows.append((current_start, test_end))
+        current_start += timedelta(days=step_days)
+
+    if not windows:
+        raise ValueError(
+            f"Not enough data for walk-forward. Need at least {test_days} days, "
+            f"got {total_days} days. Try shorter periods or more data."
+        )
+
+    # Warning for too few windows
+    if len(windows) < 10:
+        logger.warning("!" * 60)
+        logger.warning("WARNING: Only %d windows. Results may not be reliable.", len(windows))
+        logger.warning("Recommend at least 10 windows for robust validation.")
+        logger.warning("!" * 60)
+
+    logger.info("Generated %d test windows:", len(windows))
+    for i, (ts, te) in enumerate(windows):
+        logger.info("  Window %d: %s to %s", i + 1, ts.date(), te.date())
+
+    # Download data
     logger.info("[1/4] Downloading historical data...")
-    lookback_bars = 200  # Required for indicator calculation
+    lookback_bars = 200
     lookback_delta = interval_to_timedelta(interval) * lookback_bars
     download_start = start_dt - lookback_delta
     logger.info("Including %d bars lookback (from %s)", lookback_bars, download_start.date())
     download([symbol], interval, download_start, end_dt)
     logger.info("Data download complete.")
 
-    # Get price hint from last available data
-    logger.info("[2/4] Getting price information...")
+    # Preload all window data
+    logger.info("[2/4] Preloading window data...")
+    window_data = _preload_window_data(
+        symbol=symbol,
+        interval=interval,
+        windows=windows,
+        commission_ratio=commission_ratio,
+        starting_margin=starting_margin,
+    )
+    total_points = sum(len(w.ohlcv_data) for w in window_data)
+    logger.info("Loaded %d evaluation points across %d windows", total_points, len(windows))
+
+    # Get price hint
     price_hint = None
     try:
-        client = get_binance_client(
-            fake=True,
-            extra_params={"assets": {"USDT": starting_margin}, "commission_ratio": commission_ratio},
-        )
-        # Use end_dt - 1 day to avoid missing file for end_dt itself
-        price_check_dt = end_dt - timedelta(days=1)
-        price_ts = datetime_to_timestamp(price_check_dt)
-        klines = client.get_klines(symbol=symbol, interval=interval, limit=1, endTime=price_ts)
-        if klines:
-            price_hint = float(klines[-1].close)
-            logger.info("Current price: %.4f", price_hint)
-    except Exception as e:
-        logger.warning("Could not get price: %s", e)
+        if window_data and window_data[-1].ohlcv_data:
+            price_hint = float(window_data[-1].ohlcv_data[-1][1])
+            logger.info("Price hint: %.4f", price_hint)
+    except Exception:
+        pass
+
+    # Load seed strategy if provided
+    seed_individual = None
+    if seed_strategy:
+        from jarvis.genetics.rule import Rule
+        from jarvis.genetics.strategy import Strategy as StrategyModel
+
+        logger.info("Loading seed strategy: %s", seed_strategy)
+        seed = StrategyModel.load(seed_strategy)
+        seed_individual = seed.individual
+
+        # Check if weights are in old format (small values between -1 and 1)
+        # and convert to new format (scale by WEIGHT_SCALE)
+        max_weight = max(abs(r.weight) for r in seed_individual.rules)
+        if max_weight <= 10:  # Old format detected
+            logger.info("Converting old weight format to new scale (x%d)", Rule.WEIGHT_SCALE)
+            for rule in seed_individual.rules:
+                rule.weight *= Rule.WEIGHT_SCALE
+
+        logger.info("Seed fitness was: %.2f", seed_individual.fitness)
+
+    # Initialize population
+    logger.info("[3/4] Evolving population...")
+    population = Population.create_random(
+        population_size, rules_per_individual, price_hint=price_hint, seed_individual=seed_individual
+    )
 
     bar_manager = enlighten.get_manager()
+    gen_bar = bar_manager.counter(total=generations, desc="Evolution", unit="gen")
 
-    if not walk_forward:
-        # Simple training (legacy mode)
-        logger.info("[3/4] Training (simple mode - no walk-forward)...")
-        logger.warning("Walk-forward disabled. Results may be overfit!")
+    best_individual = None
+    best_fitness = float("-inf")
+    best_results: list[WindowResult] = []
 
-        best_individual = _train_single_window(
-            symbol=symbol,
-            interval=interval,
-            train_start=start_dt,
-            train_end=end_dt,
-            population_size=population_size,
-            generations=generations,
-            rules_per_individual=rules_per_individual,
+    # Determine number of workers
+    use_parallel = os.environ.get("JARVIS_NO_PARALLEL") != "1"
+    num_workers = cpu_count() if use_parallel else 1
+    logger.info("Using %d CPU cores for evaluation", num_workers)
+
+    # Prepare params for parallel workers
+    parallel_params = {
+        "starting_margin": starting_margin,
+        "commission_ratio": commission_ratio,
+        "investment_ratio": investment_ratio,
+        "leverage": leverage,
+        "funding_enabled": funding_enabled,
+    }
+
+    for gen in range(generations):
+        # Evaluate all individuals on all windows
+        gen_best_fitness = float("-inf")
+        gen_best_individual = None
+        gen_best_results = []
+
+        if use_parallel and num_workers > 1:
+            # Parallel evaluation
+            with Pool(
+                processes=num_workers,
+                initializer=_init_worker,
+                initargs=(window_data, parallel_params),
+            ) as pool:
+                eval_results = pool.map(_evaluate_individual_parallel, population.individuals)
+
+            for individual, (fitness, results) in zip(population.individuals, eval_results):
+                individual.fitness = fitness
+                if fitness > gen_best_fitness:
+                    gen_best_fitness = fitness
+                    gen_best_individual = individual
+                    gen_best_results = results
+        else:
+            # Serial evaluation
+            for individual in population.individuals:
+                fitness, results = _evaluate_individual_on_windows(
+                    individual=individual,
+                    windows=window_data,
+                    starting_margin=starting_margin,
+                    commission_ratio=commission_ratio,
+                    investment_ratio=investment_ratio,
+                    leverage=leverage,
+                    funding_enabled=funding_enabled,
+                )
+                individual.fitness = fitness
+
+                if fitness > gen_best_fitness:
+                    gen_best_fitness = fitness
+                    gen_best_individual = individual
+                    gen_best_results = results
+
+        # Track overall best
+        if gen_best_fitness > best_fitness:
+            best_fitness = gen_best_fitness
+            best_individual = gen_best_individual
+            best_results = gen_best_results
+
+        # Log progress every generation
+        avg_return = sum(r.return_pct for r in gen_best_results) / len(gen_best_results) if gen_best_results else 0
+        logger.info(
+            "Gen %d: Best fitness=%.2f, Avg return=%.2f%%",
+            gen + 1,
+            gen_best_fitness,
+            avg_return,
+        )
+
+        # Evolve (except last generation)
+        if gen < generations - 1:
+            population = population.evolve(price_hint=price_hint)
+
+        gen_bar.update()
+
+    gen_bar.close()
+    bar_manager.stop()
+
+    # Final results
+    if best_individual is None:
+        best_individual = population.get_best()
+        _, best_results = _evaluate_individual_on_windows(
+            individual=best_individual,
+            windows=window_data,
             starting_margin=starting_margin,
             commission_ratio=commission_ratio,
             investment_ratio=investment_ratio,
             leverage=leverage,
             funding_enabled=funding_enabled,
-            price_hint=price_hint,
-            bar_manager=bar_manager,
-            window_label=f"Training {symbol}",
         )
 
-        metrics = run_backtest(
-            best_individual,
-            symbol,
-            interval,
-            start_dt,
-            end_dt,
-            starting_margin,
-            commission_ratio,
-            investment_ratio,
-            leverage,
-            funding_enabled,
-        )
+    # Calculate aggregate metrics
+    avg_return = sum(r.return_pct for r in best_results) / len(best_results)
+    avg_drawdown = sum(r.max_drawdown_pct for r in best_results) / len(best_results)
+    total_trades = sum(r.trades for r in best_results)
+    positive_windows = sum(1 for r in best_results if r.return_pct > 0)
+    liquidations = sum(1 for r in best_results if r.liquidated)
 
-        window_results = []
-        avg_test_return = metrics["return_pct"]
-        avg_test_drawdown = metrics["max_drawdown_pct"]
-        total_test_trades = metrics["total_trades"]
-    else:
-        # Walk-forward validation
-        logger.info("[3/4] Running walk-forward validation...")
-
-        # Calculate windows
-        windows = []
-        current_start = start_dt
-
-        while True:
-            train_end = current_start + timedelta(days=train_days)
-            test_start = train_end
-            test_end = test_start + timedelta(days=test_days)
-
-            if test_end > end_dt:
-                break
-
-            windows.append((current_start, train_end, test_start, test_end))
-            current_start += timedelta(days=step_days)
-
-        if not windows:
-            raise ValueError(
-                f"Not enough data for walk-forward. Need at least {train_days + test_days} days, "
-                f"got {total_days} days. Try shorter periods or more data."
-            )
-
-        logger.info("Generated %d walk-forward windows:", len(windows))
-        for i, (ts, te, vs, ve) in enumerate(windows):
-            logger.info("  Window %d: Train %s-%s | Test %s-%s", i + 1, ts.date(), te.date(), vs.date(), ve.date())
-
-        window_bar = bar_manager.counter(total=len(windows), desc="Walk-Forward", unit="win")
-        window_results: list[WindowResult] = []
-        all_individuals: list[Individual] = []
-
-        for i, (train_start, train_end, test_start, test_end) in enumerate(windows):
-            window_num = i + 1
-            logger.info("-" * 40)
-            logger.info("WINDOW %d/%d", window_num, len(windows))
-            logger.info("Training: %s to %s", train_start.date(), train_end.date())
-
-            # Train on this window
-            best_individual = _train_single_window(
-                symbol=symbol,
-                interval=interval,
-                train_start=train_start,
-                train_end=train_end,
-                population_size=population_size,
-                generations=generations,
-                rules_per_individual=rules_per_individual,
-                starting_margin=starting_margin,
-                commission_ratio=commission_ratio,
-                investment_ratio=investment_ratio,
-                leverage=leverage,
-                funding_enabled=funding_enabled,
-                price_hint=price_hint,
-                bar_manager=bar_manager,
-                window_label=f"W{window_num} Train",
-            )
-
-            # Test on unseen data
-            logger.info("Testing: %s to %s", test_start.date(), test_end.date())
-
-            train_metrics = run_backtest(
-                best_individual,
-                symbol,
-                interval,
-                train_start,
-                train_end,
-                starting_margin,
-                commission_ratio,
-                investment_ratio,
-                leverage,
-                funding_enabled,
-            )
-
-            test_metrics = run_backtest(
-                best_individual,
-                symbol,
-                interval,
-                test_start,
-                test_end,
-                starting_margin,
-                commission_ratio,
-                investment_ratio,
-                leverage,
-                funding_enabled,
-            )
-
-            result = WindowResult(
-                window_num=window_num,
-                train_start=train_start,
-                train_end=train_end,
-                test_start=test_start,
-                test_end=test_end,
-                train_return_pct=train_metrics["return_pct"],
-                test_return_pct=test_metrics["return_pct"],
-                test_max_drawdown_pct=test_metrics["max_drawdown_pct"],
-                test_trades=test_metrics["total_trades"],
-            )
-            window_results.append(result)
-            all_individuals.append(best_individual)
-
-            logger.info(
-                "Results: Train %.2f%% | Test %.2f%% | Drawdown %.2f%% | Trades %d",
-                result.train_return_pct,
-                result.test_return_pct,
-                result.test_max_drawdown_pct,
-                result.test_trades,
-            )
-
-            window_bar.update()
-
-        window_bar.close()
-
-        # Select best individual based on test performance
-        best_idx = max(range(len(window_results)), key=lambda i: window_results[i].test_return_pct)
-        best_individual = all_individuals[best_idx]
-
-        # Calculate aggregate metrics
-        avg_test_return = sum(w.test_return_pct for w in window_results) / len(window_results)
-        avg_test_drawdown = sum(w.test_max_drawdown_pct for w in window_results) / len(window_results)
-        total_test_trades = sum(w.test_trades for w in window_results)
-
-        # Log summary
-        logger.info("=" * 60)
-        logger.info("WALK-FORWARD SUMMARY")
-        logger.info("=" * 60)
-        logger.info("Window Results:")
-        for w in window_results:
-            status = "+" if w.test_return_pct > 0 else "-"
-            logger.info(
-                "  W%d: Train %+.2f%% | Test %+.2f%% %s", w.window_num, w.train_return_pct, w.test_return_pct, status
-            )
-
-        positive_windows = sum(1 for w in window_results if w.test_return_pct > 0)
-        logger.info("-" * 40)
+    # Log summary
+    logger.info("=" * 60)
+    logger.info("TRAINING COMPLETE")
+    logger.info("=" * 60)
+    logger.info("Window Results:")
+    for r in best_results:
+        status = "X" if r.liquidated else ("+" if r.return_pct > 0 else "-")
         logger.info(
-            "Positive windows: %d/%d (%.0f%%)",
-            positive_windows,
-            len(window_results),
-            100 * positive_windows / len(window_results),
+            "  W%d: Return %+.2f%% | Drawdown %.2f%% | Trades %d %s",
+            r.window_num,
+            r.return_pct,
+            r.max_drawdown_pct,
+            r.trades,
+            status,
         )
-        logger.info("Average test return: %.2f%%", avg_test_return)
-        logger.info("Average max drawdown: %.2f%%", avg_test_drawdown)
-        logger.info("Best window: #%d (test return %.2f%%)", best_idx + 1, window_results[best_idx].test_return_pct)
 
-    bar_manager.stop()
+    logger.info("-" * 40)
+    logger.info("Positive windows: %d/%d (%.0f%%)", positive_windows, len(best_results), 100 * positive_windows / len(best_results))
+    logger.info("Liquidations: %d", liquidations)
+    logger.info("Average return: %.2f%%", avg_return)
+    logger.info("Average drawdown: %.2f%%", avg_drawdown)
+    logger.info("Fitness: %.2f", best_fitness)
+    logger.info("Total trades: %d", total_trades)
 
-    # Create and save strategy
+    # Save strategy
     logger.info("[4/4] Saving strategy...")
 
     training_config = TrainingConfig(
@@ -642,28 +663,19 @@ def train(
         interval=interval,
         start_date=start_dt.strftime("%Y-%m-%d"),
         end_date=end_dt.strftime("%Y-%m-%d"),
-        result_type="walk_forward" if walk_forward else "training",
-        return_pct=avg_test_return,
-        max_drawdown_pct=avg_test_drawdown,
-        total_trades=total_test_trades,
-        final_equity=float(starting_margin) * (1 + avg_test_return / 100),
-        peak_equity=float(starting_margin) * (1 + avg_test_return / 100),
+        result_type="walk_forward",
+        return_pct=avg_return,
+        max_drawdown_pct=avg_drawdown,
+        total_trades=total_trades,
+        final_equity=float(starting_margin) * (1 + avg_return / 100),
+        peak_equity=float(starting_margin),
     )
 
     strategy_path = strategy.save(strategies_dir)
     result_path = result.save(results_dir)
 
-    logger.info("=" * 60)
-    logger.info("TRAINING COMPLETE")
-    logger.info("=" * 60)
-    logger.info("Strategy ID: %s", strategy.id)
     logger.info("Strategy saved: %s", strategy_path)
     logger.info("Results saved: %s", result_path)
-    logger.info("-" * 40)
-    logger.info("Average Test Return: %.2f%%", avg_test_return)
-    logger.info("Average Max Drawdown: %.2f%%", avg_test_drawdown)
-    logger.info("Total Test Trades: %d", total_test_trades)
-    logger.info("Rules: %d", len(best_individual.rules))
     logger.info("=" * 60)
 
     return strategy, result

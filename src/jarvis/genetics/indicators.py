@@ -277,26 +277,39 @@ class MACD_HIST(Indicator):
 
 @dataclass
 class VOLUME(Indicator):
-    """Volume indicator (current volume)."""
+    """Volume ratio indicator - current volume / average volume.
 
-    period: int = 1  # Not used but kept for consistency
+    Returns a normalized ratio (typically 0.5-2.0 range):
+    - 1.0 = current volume equals average
+    - >1.0 = above average volume
+    - <1.0 = below average volume
+    """
+
+    period: int = 20  # Period for average volume calculation
 
     def calculate(self, ohlcv: OHLCV) -> float:
-        return float(ohlcv.volume[-1]) if len(ohlcv.volume) > 0 else 0.0
+        if len(ohlcv.volume) < self.period:
+            return 1.0  # Not enough data, return neutral
+        avg_volume = np.mean(ohlcv.volume[-self.period :])
+        if avg_volume == 0:
+            return 1.0
+        return float(ohlcv.volume[-1] / avg_volume)
 
     def mutate(self) -> "VOLUME":
-        return VOLUME(period=self.period)
+        new_period = self.period + random.randint(-5, 5)
+        new_period = max(5, min(50, new_period))
+        return VOLUME(period=new_period)
 
     @classmethod
     def random(cls) -> "VOLUME":
-        return cls()
+        return cls(period=random.randint(5, 50))
 
     def to_dict(self) -> dict[str, Any]:
         return {"type": "VOLUME", "params": {"period": self.period}}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "VOLUME":
-        return cls(period=data["params"].get("period", 1))
+        return cls(period=data["params"].get("period", 20))
 
 
 @dataclass

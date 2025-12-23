@@ -2,7 +2,7 @@
 
 from jarvis.actions import ActionGenerator, AllInActionGenerator
 from jarvis.client import CachedClient, get_binance_client
-from jarvis.commands import download, test, trade, trade_with_strategies, train
+from jarvis.commands import download, paper_info, paper_init, paper_list, paper_trade, pinescript, test, trade, trade_with_strategies, train
 from jarvis.models import ActionType, Color, FakeResponse, Kline, Position
 from jarvis.settings import Settings, get_settings, notify, settings
 from jarvis.signals import (
@@ -39,6 +39,11 @@ __all__ = [
     "AllInActionGenerator",
     # Commands
     "download",
+    "paper_info",
+    "paper_init",
+    "paper_list",
+    "paper_trade",
+    "pinescript",
     "test",
     "trade",
     "trade_with_strategies",

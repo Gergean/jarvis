@@ -1,6 +1,7 @@
 """Individual class for the GA trading system."""
 
 import copy
+import logging
 import random
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,6 +9,8 @@ from typing import Any
 from jarvis.genetics.indicators import OHLCV
 from jarvis.genetics.rule import Rule
 from jarvis.models import ActionType, PositionSide
+
+logger = logging.getLogger("jarvis")
 
 
 @dataclass
@@ -47,6 +50,7 @@ class Individual:
             return ActionType.STAY
 
         total = sum(rule.calculate_contribution(ohlcv) for rule in self.rules)
+
 
         # No position - can open new
         if current_side == PositionSide.NONE:
@@ -157,3 +161,148 @@ class Individual:
 
     def __repr__(self) -> str:
         return f"Individual(rules={len(self.rules)}, fitness={self.fitness:.2f})"
+
+    def to_pine_script(self, strategy_name: str = "GA Strategy") -> str:
+        """Generate Pine Script code for TradingView.
+
+        Args:
+            strategy_name: Name for the strategy
+
+        Returns:
+            Pine Script v5 code as string
+        """
+        lines = [
+            "//@version=5",
+            f'strategy("{strategy_name}", overlay=true, initial_capital=100, default_qty_type=strategy.percent_of_equity, default_qty_value=20)',
+            "",
+            "// === INDICATORS ===",
+        ]
+
+        # Track unique indicators to avoid duplicates
+        indicator_vars = {}  # (type, params_tuple) -> var_name
+        var_counter = {}
+        indicator_var_names = []  # Track all indicator var names for na check
+
+        for rule in self.rules:
+            ind_dict = rule.indicator.to_dict()
+            ind_type = ind_dict["type"]
+            params = ind_dict.get("params", {})
+
+            # Create unique key for this indicator
+            params_tuple = tuple(sorted(params.items()))
+            key = (ind_type, params_tuple)
+
+            if key not in indicator_vars:
+                var_counter[ind_type] = var_counter.get(ind_type, 0) + 1
+                var_name = f"{ind_type.lower()}_{var_counter[ind_type]}"
+
+                if ind_type == "SMA":
+                    period = params.get("period", 20)
+                    lines.append(f"{var_name} = ta.sma(close, {period})")
+                    indicator_var_names.append(var_name)
+                elif ind_type == "EMA":
+                    period = params.get("period", 20)
+                    lines.append(f"{var_name} = ta.ema(close, {period})")
+                    indicator_var_names.append(var_name)
+                elif ind_type == "RSI":
+                    period = params.get("period", 14)
+                    lines.append(f"{var_name} = ta.rsi(close, {period})")
+                    indicator_var_names.append(var_name)
+                elif ind_type == "MACD":
+                    fast = params.get("fast", 12)
+                    slow = params.get("slow", 26)
+                    signal = params.get("signal", 9)
+                    lines.append(f"[{var_name}, {var_name}_sig, {var_name}_hist] = ta.macd(close, {fast}, {slow}, {signal})")
+                    indicator_var_names.append(var_name)
+                elif ind_type == "MACD_HIST":
+                    fast = params.get("fast", 12)
+                    slow = params.get("slow", 26)
+                    signal = params.get("signal", 9)
+                    lines.append(f"[{var_name}_m, {var_name}_s, {var_name}] = ta.macd(close, {fast}, {slow}, {signal})")
+                    indicator_var_names.append(var_name)
+                elif ind_type == "PRICE":
+                    var_name = "close"
+                elif ind_type == "VOLUME":
+                    var_name = "volume"
+
+                indicator_vars[key] = var_name
+
+        # Replace NaN with default values (matching Python behavior)
+        lines.append("")
+        lines.append("// === NaN HANDLING (match Python fallback values) ===")
+        for var_name in indicator_var_names:
+            # Python uses 0.0 for SMA/EMA/MACD when nan, 50.0 for RSI
+            if var_name.startswith("rsi"):
+                lines.append(f"{var_name} := na({var_name}) ? 50.0 : {var_name}")
+            else:
+                lines.append(f"{var_name} := na({var_name}) ? 0.0 : {var_name}")
+
+        lines.append("")
+        lines.append("// === SIGNAL CALCULATION ===")
+        lines.append("// Formula: score = sum((indicator_value - target) * weight / 100000)")
+        lines.append("score = 0.0")
+
+        for rule in self.rules:
+            ind_dict = rule.indicator.to_dict()
+            ind_type = ind_dict["type"]
+            params = ind_dict.get("params", {})
+            params_tuple = tuple(sorted(params.items()))
+            key = (ind_type, params_tuple)
+
+            var_name = indicator_vars[key]
+            target = rule.target
+            weight = rule.weight
+
+            # Normalize by WEIGHT_SCALE (same as Python)
+            lines.append(f"score := score + ({var_name} - {target:.6f}) * {weight:.2f} / 100000.0")
+
+        # Find max lookback period needed
+        max_period = 200  # Default safety margin
+        for rule in self.rules:
+            ind_dict = rule.indicator.to_dict()
+            params = ind_dict.get("params", {})
+            period = params.get("period", 0)
+            slow = params.get("slow", 0)  # For MACD
+            max_period = max(max_period, period, slow)
+
+        lines.extend([
+            "",
+            "// === STRATEGY LOGIC ===",
+            f"longThreshold = {self.LONG_THRESHOLD}",
+            f"shortThreshold = {self.SHORT_THRESHOLD}",
+            f"closeThreshold = {self.CLOSE_THRESHOLD}",
+            f"minBars = {max_period}  // Warmup period for indicators",
+            "",
+            "// Track position state",
+            "var int positionState = 0  // 0=none, 1=long, -1=short",
+            "",
+            "// Skip first N bars (indicator warmup period)",
+            "if bar_index >= minBars",
+            "    // Open Long (only if no position)",
+            "    if score > longThreshold and positionState == 0",
+            '        strategy.entry("Long", strategy.long)',
+            "        positionState := 1",
+            "",
+            "    // Open Short (only if no position)",
+            "    if score < shortThreshold and positionState == 0",
+            '        strategy.entry("Short", strategy.short)',
+            "        positionState := -1",
+            "",
+            "    // Close Long (if in long and score drops)",
+            "    if score < -closeThreshold and positionState == 1",
+            '        strategy.close("Long")',
+            "        positionState := 0",
+            "",
+            "    // Close Short (if in short and score rises)",
+            "    if score > closeThreshold and positionState == -1",
+            '        strategy.close("Short")',
+            "        positionState := 0",
+            "",
+            "// === PLOTS ===",
+            'plot(score, color=score > 0 ? color.green : color.red, title="Score")',
+            'hline(longThreshold, "Long", color=color.green, linestyle=hline.style_dotted)',
+            'hline(shortThreshold, "Short", color=color.red, linestyle=hline.style_dotted)',
+            'bgcolor(bar_index < minBars ? color.new(color.gray, 90) : na, title="Warmup")',
+        ])
+
+        return "\n".join(lines)
