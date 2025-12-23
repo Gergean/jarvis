@@ -25,8 +25,14 @@ uv run python src/jarvis.py doctest -v
 # Download data
 uv run python src/jarvis.py download -s BTCUSDT -i 1h
 
-# Train a strategy
+# Train a strategy (walk-forward validation - default)
 uv run python src/jarvis.py train -s BTCUSDT -i 1h -l 5
+
+# Train with custom walk-forward periods
+uv run python src/jarvis.py train -s BTCUSDT -i 1h --train-period 90d --test-period 2w --step-period 1w
+
+# Train without walk-forward (not recommended)
+uv run python src/jarvis.py train -s BTCUSDT -i 1h --no-walk-forward
 
 # Test a strategy (out-of-sample)
 uv run python src/jarvis.py test -s BTCUSDT_abc123 -i 1h -l 5
@@ -48,10 +54,17 @@ Modular Python package containing:
 - `Strategy` - Saved individual with metadata
 
 **Commands** (`commands/`):
-- `train` - Train GA strategies on historical data
+- `train` - Train GA strategies with walk-forward validation (default)
 - `test` - Out-of-sample testing
 - `trade` - Live futures trading (dry-run or real)
 - `download` - Fetch historical klines
+
+**Walk-Forward Validation**:
+Train uses rolling windows by default to prevent overfitting:
+- `--train-period 3M` - Training period per window (default: 3 months)
+- `--test-period 1M` - Test period per window (default: 1 month)
+- `--step-period 1M` - Step size between windows (default: 1 month)
+- Period formats: `Nd` (days), `Nw` (weeks), `NM` (months)
 
 **Key Data Structures**:
 ```python

@@ -100,13 +100,22 @@ class Population:
             )
 
             lookback = 200
+
+            # Need to fetch extra data for lookback period
+            from jarvis.utils import interval_to_timedelta
+            lookback_delta = interval_to_timedelta(interval) * lookback
+            fetch_start = start_dt - lookback_delta
+
             all_klines = temp_client.get_klines(
                 symbol=symbol,
                 interval=interval,
-                startTime=datetime_to_timestamp(start_dt),
+                startTime=datetime_to_timestamp(fetch_start),
                 endTime=datetime_to_timestamp(end_dt),
                 limit=50000,
             )
+
+            first_price: Decimal | None = None
+            last_price: Decimal | None = None
 
             if all_klines:
                 n = len(all_klines)
@@ -122,9 +131,6 @@ class Population:
                     low_arr[i] = float(k.low)
                     close_arr[i] = float(k.close)
                     volume_arr[i] = float(k.volume)
-
-                first_price: Decimal | None = None
-                last_price: Decimal | None = None
 
                 for i in range(lookback, n):
                     start_idx = i - lookback + 1
@@ -152,7 +158,7 @@ class Population:
 
         # Calculate funding interval in candles based on interval
         interval_hours = {"1m": 1/60, "5m": 5/60, "15m": 0.25, "30m": 0.5, "1h": 1, "4h": 4, "1d": 24}.get(interval, 1)
-        funding_interval_candles = int(FUNDING_INTERVAL_HOURS / interval_hours)
+        funding_interval_candles = max(1, int(FUNDING_INTERVAL_HOURS / interval_hours))
 
         # Evaluate each individual
         for individual in self.individuals:

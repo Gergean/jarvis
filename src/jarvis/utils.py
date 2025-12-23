@@ -177,6 +177,46 @@ def assets_to_str(assets: dict[str, Decimal], prefix: str = "Current assets: ") 
     return (prefix + "%s: %s, " * len(assets))[:-2] % tuple(params)
 
 
+def parse_period_to_days(period: str) -> int:
+    """Parse period string to number of days.
+
+    Supported formats:
+    - Nd: N days (e.g., '7d', '30d', '90d')
+    - Nw: N weeks (e.g., '1w', '2w', '4w')
+    - NM: N months (e.g., '1M', '3M', '6M') - assumes 30 days/month
+
+    >>> parse_period_to_days('7d')
+    7
+    >>> parse_period_to_days('1w')
+    7
+    >>> parse_period_to_days('2w')
+    14
+    >>> parse_period_to_days('1M')
+    30
+    >>> parse_period_to_days('3M')
+    90
+    >>> parse_period_to_days('90d')
+    90
+    """
+    if not period:
+        raise ValueError("Period string cannot be empty")
+
+    unit = period[-1]
+    try:
+        value = int(period[:-1])
+    except ValueError as e:
+        raise ValueError(f"Invalid period format: {period}") from e
+
+    if unit == "d":
+        return value
+    elif unit == "w":
+        return value * 7
+    elif unit == "M":
+        return value * 30
+    else:
+        raise ValueError(f"Unknown period unit: {unit}. Use 'd' (days), 'w' (weeks), or 'M' (months)")
+
+
 def calculate_avg_buy_price(quantity: float, price: float, last_quantity: float, last_avg_price: float) -> float:
     """Calculate weighted average buy price after adding new position.
 

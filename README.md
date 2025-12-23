@@ -5,6 +5,7 @@ Binance Futures trading automation system using genetic algorithm-based strategi
 ## Features
 
 - **GA Strategy Training**: Evolve trading strategies using genetic algorithms
+- **Walk-Forward Validation**: Prevent overfitting with rolling train/test windows
 - **Futures Support**: Long/short positions with configurable leverage (1-10x)
 - **Backtesting**: Realistic simulation with funding fees and liquidation
 - **Out-of-Sample Testing**: Validate strategies on unseen data
@@ -49,16 +50,26 @@ just download -s BTCUSDT ETHUSDT -i 1h
 
 ### Train a Strategy
 
+Training uses **walk-forward validation** by default to prevent overfitting.
+
 ```bash
-# Train with default settings (6 months, 1x leverage)
+# Default: 1 year data, 3M train / 1M test windows
 just train -s BTCUSDT -i 1h
 
-# Train with 5x leverage
+# With 5x leverage
 just train -s BTCUSDT -i 1h -l 5
 
+# Custom walk-forward periods (90 days train, 2 weeks test, 1 week step)
+just train -s BTCUSDT -i 1h --train-period 90d --test-period 2w --step-period 1w
+
+# Disable walk-forward (not recommended - overfitting risk)
+just train -s BTCUSDT -i 1h --no-walk-forward
+
 # Custom date range
-just train -s BTCUSDT -i 1h -st 2024-01-01T00:00:00 -et 2024-06-01T00:00:00
+just train -s BTCUSDT -i 1h -st 2024-01-01T00:00:00 -et 2024-12-01T00:00:00
 ```
+
+**Period formats**: `Nd` (days), `Nw` (weeks), `NM` (months)
 
 ### Test a Strategy
 

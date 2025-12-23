@@ -160,6 +160,41 @@ def main() -> None:
         help="Disable funding fee simulation.",
     )
 
+    train_parser.add_argument(
+        "--train-period",
+        dest="train_period",
+        default="3M",
+        type=str,
+        metavar="PERIOD",
+        help="Training period per window (e.g., 3M, 90d, 12w). Default: %(default)s",
+    )
+
+    train_parser.add_argument(
+        "--test-period",
+        dest="test_period",
+        default="1M",
+        type=str,
+        metavar="PERIOD",
+        help="Test period per window (e.g., 1M, 30d, 4w). Default: %(default)s",
+    )
+
+    train_parser.add_argument(
+        "--step-period",
+        dest="step_period",
+        default="1M",
+        type=str,
+        metavar="PERIOD",
+        help="Step size between windows (e.g., 1M, 30d, 4w). Default: %(default)s",
+    )
+
+    train_parser.add_argument(
+        "--no-walk-forward",
+        dest="walk_forward",
+        action="store_false",
+        default=True,
+        help="Disable walk-forward validation (not recommended).",
+    )
+
     # Trade-GA parser arguments (trade with GA strategies)
     trade_ga_parser.add_argument(
         "-s",
@@ -329,6 +364,10 @@ def main() -> None:
             kwargs.rules_per_individual,
             leverage=kwargs.leverage,
             funding_enabled=kwargs.funding_enabled,
+            walk_forward=kwargs.walk_forward,
+            train_period=kwargs.train_period,
+            test_period=kwargs.test_period,
+            step_period=kwargs.step_period,
         )
         print(f"Strategy: {strategy.id}")
         print(f"Return: {result.return_pct:.2f}%")

@@ -128,7 +128,22 @@ def load_day_file(symbol: str, interval: str, day: datetime, file_path: str | No
     lines: list[list[Any]] = []
     with open(file_path) as csv_file:
         reader = csv.reader(csv_file)
-        next(reader)  # Skip header.
+        first_line = next(reader, None)
+        # Check if first line is header (non-numeric first column) or data
+        if first_line:
+            try:
+                # If first column is numeric, it's data not header
+                int(first_line[0])
+                # It's data, process it
+                open_time = int(first_line[0])
+                close_time = int(first_line[6])
+                line: list[Any] = list(map(float, first_line))
+                line[0] = open_time
+                line[6] = close_time
+                lines.append(line)
+            except (ValueError, IndexError):
+                # First line is header, skip it
+                pass
         for _line in reader:
             open_time = int(_line[0])
             close_time = int(_line[6])
