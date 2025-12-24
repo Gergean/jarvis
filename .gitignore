@@ -27,3 +27,6 @@ charts/
 
 # Paper trading artifacts
 paper/
+
+# Detailed test results (can be regenerated)
+src/results/
