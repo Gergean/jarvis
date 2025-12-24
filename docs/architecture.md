@@ -270,6 +270,78 @@ fitness = strateji_getirisi - buy_hold_getirisi
 | +5% | +10% | -5 | Kötü, BTC alsaydık daha iyiydi |
 | +15% | -5% | +20 | Mükemmel! Düşen piyasada bile kar |
 
+### Fitness Fonksiyonu Detayları
+
+Fitness hesaplaması `Population.evaluate_fitness()` metodunda yapılır. Gerçekçi bir futures backtest simülasyonu içerir:
+
+#### 1. Veri Hazırlığı
+
+```python
+# 200 bar lookback ile OHLCV verileri yüklenir
+lookback = 200
+preloaded_data = []  # [(OHLCV, price, candle_idx), ...]
+```
+
+#### 2. Her Kline İçin Simülasyon
+
+```python
+for ohlcv, price, candle_idx in preloaded_data:
+    # a) Liquidation kontrolü (leverage > 1 ise)
+    if position_side == LONG and price <= liq_price:
+        margin_balance -= position_margin  # Tüm margin kayıp
+        position_side = NONE
+
+    # b) Funding fee (her 8 saatte bir)
+    if candles_since_funding >= funding_interval_candles:
+        funding_payment = notional * FUNDING_FEE_RATE * num_periods
+        if LONG: margin_balance -= funding_payment
+        if SHORT: margin_balance += funding_payment
+
+    # c) Sinyal al ve işlem yap
+    signal = individual.get_signal(ohlcv, position_side)
+
+    if signal == LONG and position_side == NONE:
+        # Pozisyon aç: margin_to_use = balance * 0.2 (investment_ratio)
+        position_size = (margin_to_use * leverage) / price
+        fee = position_size * price * FUTURES_TAKER_FEE
+        margin_balance -= fee + margin_to_use
+
+    elif signal == CLOSE:
+        # PnL hesapla
+        if LONG:  pnl = quantity * (price - entry_price)
+        if SHORT: pnl = quantity * (entry_price - price)
+        margin_balance += position_margin + pnl - close_fee
+```
+
+#### 3. Final Equity ve Fitness
+
+```python
+# Unrealized PnL dahil et
+final_equity = margin_balance
+if position_side != NONE:
+    unrealized_pnl = quantity * (current_price - entry_price)
+    final_equity += position_margin + unrealized_pnl
+
+# Fitness = Strateji getirisi - Buy & Hold getirisi
+strategy_return_pct = (final_equity - starting_margin) / starting_margin * 100
+individual.fitness = strategy_return_pct - buy_hold_return_pct
+```
+
+#### Simüle Edilen Maliyetler
+
+| Maliyet | Değer | Açıklama |
+|---------|-------|----------|
+| `FUTURES_TAKER_FEE` | %0.04 | Her işlemde (açış + kapanış) |
+| `FUNDING_FEE_RATE` | %0.01/8h | Long öder, short alır |
+| Liquidation | Margin kaybı | Fiyat %10 ters giderse (10x'de) |
+
+#### Neden Bu Yöntem?
+
+1. **Gerçekçilik**: Komisyon, funding, liquidation simüle edilir
+2. **Buy & Hold benchmark**: Salt getiri yerine "piyasayı yenmek" önemli
+3. **Position awareness**: LONG'dayken tekrar LONG açılmaz
+4. **Investment ratio %20**: Her pozisyon margin'in %20'sini kullanır, risk yönetimi
+
 ### Crossover (Çaprazlama) = İki Stratejiyi Birleştirme
 
 İki başarılı strateji "ebeveyn" olur, kuralları karıştırılarak "çocuk" oluşturulur:
@@ -345,11 +417,7 @@ jarvis/
 │   │   ├── population.py  # Population sınıfı (evrim motoru)
 │   │   ├── rule.py        # Rule sınıfı (tek kural)
 │   │   ├── indicators.py  # RSI, SMA, MACD hesaplamaları
-│   │   ├── strategy.py    # Strateji kaydetme/yükleme
-│   │   └── portfolio.py   # Çoklu coin yönetimi
-│   │
-│   ├── signals/           # [DEPRECATED] Eski sinyal üreticileri
-│   ├── actions/           # [DEPRECATED] Eski action üreticileri
+│   │   └── strategy.py    # Strateji kaydetme/yükleme
 │   │
 │   ├── client.py          # Binance API + FakeClient
 │   ├── models.py          # ActionType, PositionSide, vs.
