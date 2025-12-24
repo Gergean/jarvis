@@ -273,75 +273,46 @@ fitness = strateji_getirisi - buy_hold_getirisi
 
 ### Fitness Fonksiyonu Detayları
 
-Fitness hesaplaması `Population.evaluate_fitness()` metodunda yapılır. Gerçekçi bir futures backtest simülasyonu içerir:
+Fitness hesaplaması `Population.evaluate_fitness()` metodunda yapılır. Her strateji için gerçekçi bir futures backtest simülasyonu çalıştırılır.
 
-#### 1. Veri Hazırlığı
+#### Temel Formül
 
-```python
-# 200 bar lookback ile OHLCV verileri yüklenir
-lookback = 200
-preloaded_data = []  # [(OHLCV, price, candle_idx), ...]
+```
+fitness = strateji_getirisi(%) - buy_hold_getirisi(%)
 ```
 
-#### 2. Her Kline İçin Simülasyon
+Pozitif fitness = Strateji, coin'i sadece tutmaktan daha iyi performans gösterdi.
 
-```python
-for ohlcv, price, candle_idx in preloaded_data:
-    # a) Liquidation kontrolü (leverage > 1 ise)
-    if position_side == LONG and price <= liq_price:
-        margin_balance -= position_margin  # Tüm margin kayıp
-        position_side = NONE
+#### Simülasyon Kuralları
 
-    # b) Funding fee (her 8 saatte bir)
-    if candles_since_funding >= funding_interval_candles:
-        funding_payment = notional * FUNDING_FEE_RATE * num_periods
-        if LONG: margin_balance -= funding_payment
-        if SHORT: margin_balance += funding_payment
+**Pozisyon Açma:**
+- Her pozisyon, mevcut bakiyenin %20'sini kullanır (investment_ratio)
+- Kaldıraç uygulanır: pozisyon_büyüklüğü = margin × leverage
+- Açılışta taker fee (%0.04) kesilir
 
-    # c) Sinyal al ve işlem yap
-    signal = individual.get_signal(ohlcv, position_side)
+**Pozisyon Kapama:**
+- Kar/zarar hesaplanır ve bakiyeye eklenir
+- Kapanışta da taker fee kesilir
+- Açık pozisyon varsa dönem sonunda unrealized PnL dahil edilir
 
-    if signal == LONG and position_side == NONE:
-        # Pozisyon aç: margin_to_use = balance * 0.2 (investment_ratio)
-        position_size = (margin_to_use * leverage) / price
-        fee = position_size * price * FUTURES_TAKER_FEE
-        margin_balance -= fee + margin_to_use
+**Liquidation (Tasfiye):**
+- Kaldıraçlı pozisyonda fiyat tasfiye noktasına ulaşırsa margin kaybedilir
+- Örnek: 10x long'da fiyat %10 düşerse → tüm margin kayıp
+- Tasfiye olan stratejiler çok düşük fitness alır
 
-    elif signal == CLOSE:
-        # PnL hesapla
-        if LONG:  pnl = quantity * (price - entry_price)
-        if SHORT: pnl = quantity * (entry_price - price)
-        margin_balance += position_margin + pnl - close_fee
-```
-
-#### 3. Final Equity ve Fitness
-
-```python
-# Unrealized PnL dahil et
-final_equity = margin_balance
-if position_side != NONE:
-    unrealized_pnl = quantity * (current_price - entry_price)
-    final_equity += position_margin + unrealized_pnl
-
-# Fitness = Strateji getirisi - Buy & Hold getirisi
-strategy_return_pct = (final_equity - starting_margin) / starting_margin * 100
-individual.fitness = strategy_return_pct - buy_hold_return_pct
-```
-
-#### Simüle Edilen Maliyetler
-
-| Maliyet | Değer | Açıklama |
-|---------|-------|----------|
-| `FUTURES_TAKER_FEE` | %0.04 | Her işlemde (açış + kapanış) |
-| `FUNDING_FEE_RATE` | %0.01/8h | Long öder, short alır |
-| Liquidation | Margin kaybı | Fiyat %10 ters giderse (10x'de) |
+**Funding Fee:**
+- Her 8 saatte bir uygulanır
+- Long pozisyonlar öder, short pozisyonlar alır
+- Uzun süre açık kalan pozisyonları cezalandırır
 
 #### Neden Bu Yöntem?
 
-1. **Gerçekçilik**: Komisyon, funding, liquidation simüle edilir
-2. **Buy & Hold benchmark**: Salt getiri yerine "piyasayı yenmek" önemli
-3. **Position awareness**: LONG'dayken tekrar LONG açılmaz
-4. **Investment ratio %20**: Her pozisyon margin'in %20'sini kullanır, risk yönetimi
+| Özellik | Açıklama |
+|---------|----------|
+| **Buy & Hold benchmark** | Salt getiri yerine "piyasayı yenmek" ölçülür |
+| **Gerçekçi maliyetler** | Komisyon, funding, liquidation simüle edilir |
+| **Risk yönetimi** | %20 investment ratio ile tek pozisyon tüm sermayeyi riske atmaz |
+| **Position awareness** | LONG'dayken tekrar LONG açılmaz, önce CLOSE gerekir |
 
 ### Crossover (Çaprazlama) = İki Stratejiyi Birleştirme
 
