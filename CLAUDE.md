@@ -39,6 +39,14 @@ uv run python src/jarvis.py test -s BTCUSDT_abc123 -i 1h -l 5
 
 # Trade with strategies (dry run)
 uv run python src/jarvis.py trade-ga -s BTCUSDT_abc123 --dry-run
+
+# Paper trading
+uv run python src/jarvis.py paper init test1 -b 1000 -c BTCUSDT:1h -s BTCUSDT_abc123
+uv run python src/jarvis.py paper trade test1 -et 2025-10-15T00:00:00
+uv run python src/jarvis.py paper info test1
+
+# Pine Script export
+uv run python src/jarvis.py pinescript -s BTCUSDT_abc123
 ```
 
 ## Architecture
@@ -57,7 +65,9 @@ Modular Python package containing:
 - `train` - Train GA strategies with walk-forward validation (default)
 - `test` - Out-of-sample testing
 - `trade` - Live futures trading (dry-run or real)
+- `paper` - Paper trading simulation with elites system
 - `download` - Fetch historical klines
+- `pinescript` - Export strategy to TradingView Pine Script
 
 **Walk-Forward Validation**:
 Train uses rolling windows by default to prevent overfitting:
@@ -65,6 +75,12 @@ Train uses rolling windows by default to prevent overfitting:
 - `--test-period 1M` - Test period per window (default: 1 month)
 - `--step-period 1M` - Step size between windows (default: 1 month)
 - Period formats: `Nd` (days), `Nw` (weeks), `NM` (months)
+
+**Elites System** (for paper trading):
+- Strategies evolve daily at 00:00 UTC
+- Stored in `strategies/elites/{SYMBOL}/{interval}/YYYYMMDD_HHMMSS.json`
+- Prevents "time travel" - paper trade uses only strategies available at that time
+- Seed strategy required to start evolution chain
 
 **Key Data Structures**:
 ```python
@@ -80,8 +96,9 @@ MAX_LEVERAGE = 10
 
 - `data/binance/{SYMBOL}/{interval}/YYYYMMDD.csv` - Historical OHLCV klines
 - `strategies/*.json` - Saved GA strategies
-- `results/*.json` - Backtest/test results
-- `logs/` - Rotating log files
+- `strategies/elites/` - Daily evolved elite strategies
+- `paper/*.json` - Paper trading wallets
+- `results/*.json` - Test results
 
 ## Environment Variables
 
