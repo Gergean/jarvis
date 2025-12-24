@@ -314,6 +314,8 @@ Pozitif fitness = Strateji, coin'i sadece tutmaktan daha iyi performans gösterd
 | **Risk yönetimi** | %20 investment ratio ile tek pozisyon tüm sermayeyi riske atmaz |
 | **Position awareness** | LONG'dayken tekrar LONG açılmaz, önce CLOSE gerekir |
 
+> **TODO:** Sharpe Ratio'yu fitness fonksiyonuna ekleyerek risk-adjusted getiri ölçümü denenecek.
+
 ### Crossover (Çaprazlama) = İki Stratejiyi Birleştirme
 
 İki başarılı strateji "ebeveyn" olur, kuralları karıştırılarak "çocuk" oluşturulur:
