@@ -10,7 +10,18 @@ from os.path import exists
 
 import sentry_sdk
 
-from jarvis import download, paper_info, paper_init, paper_list, paper_trade, pinescript, test, trade, trade_with_strategies, train
+from jarvis import (
+    download,
+    paper_info,
+    paper_init,
+    paper_list,
+    paper_trade,
+    pinescript,
+    test,
+    trade,
+    trade_with_strategies,
+    train,
+)
 from jarvis.logging import logger
 from jarvis.settings import get_settings, settings
 
@@ -79,6 +90,14 @@ def main() -> None:
         required=True,
         help="Trading config as SYMBOL:INTERVAL (e.g., -c BTCUSDT:1h -c ETHUSDT:4h)",
     )
+    paper_init_parser.add_argument(
+        "-s",
+        "--seed",
+        dest="seed_strategy",
+        type=str,
+        default=None,
+        help="Seed strategy ID (e.g., ETHUSDT_abc123). Required for paper trading.",
+    )
 
     paper_trade_parser = paper_subparsers.add_parser("trade", help="Run paper trading")
     paper_trade_parser.add_argument(
@@ -102,7 +121,7 @@ def main() -> None:
         help="Wallet identifier",
     )
 
-    paper_list_parser = paper_subparsers.add_parser("list", help="List all paper wallets")
+    paper_subparsers.add_parser("list", help="List all paper wallets")
 
     # Pinescript parser arguments
     pinescript_parser.add_argument(
@@ -483,9 +502,11 @@ def main() -> None:
 
     elif kwargs.subparser == "paper":
         if kwargs.paper_command == "init":
-            wallet = paper_init(kwargs.wallet_id, kwargs.balance, kwargs.config)
+            wallet = paper_init(kwargs.wallet_id, kwargs.balance, kwargs.config, kwargs.seed_strategy)
             print(f"Wallet '{wallet['id']}' created with ${wallet['balance']} balance")
             print(f"Config: {wallet['config']}")
+            if wallet.get("seed_strategies"):
+                print(f"Seed strategies: {list(wallet['seed_strategies'].keys())}")
 
         elif kwargs.paper_command == "trade":
             end_dt = kwargs.end_dt.replace(tzinfo=datetime.now().astimezone().tzinfo) if kwargs.end_dt else None
