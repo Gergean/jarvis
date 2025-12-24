@@ -1,0 +1,69 @@
+//@version=5
+strategy("XRPUSDT_761b053e", overlay=true, initial_capital=100, default_qty_type=strategy.percent_of_equity, default_qty_value=20)
+
+// === INDICATORS ===
+[macd_1, macd_1_sig, macd_1_hist] = ta.macd(close, 19, 38, 13)
+ema_1 = ta.ema(close, 127)
+[macd_hist_1_m, macd_hist_1_s, macd_hist_1] = ta.macd(close, 5, 23, 13)
+ema_2 = ta.ema(close, 176)
+[macd_2, macd_2_sig, macd_2_hist] = ta.macd(close, 5, 33, 10)
+sma_1 = ta.sma(close, 110)
+[macd_hist_2_m, macd_hist_2_s, macd_hist_2] = ta.macd(close, 5, 20, 13)
+
+// === NaN HANDLING (match Python fallback values) ===
+macd_1 := na(macd_1) ? 0.0 : macd_1
+ema_1 := na(ema_1) ? 0.0 : ema_1
+macd_hist_1 := na(macd_hist_1) ? 0.0 : macd_hist_1
+ema_2 := na(ema_2) ? 0.0 : ema_2
+macd_2 := na(macd_2) ? 0.0 : macd_2
+sma_1 := na(sma_1) ? 0.0 : sma_1
+macd_hist_2 := na(macd_hist_2) ? 0.0 : macd_hist_2
+
+// === SIGNAL CALCULATION ===
+// Formula: score = sum((indicator_value - target) * weight / 100000)
+score = 0.0
+score := score + (macd_1 - -0.024959) * -697288.93 / 100000.0
+score := score + (ema_1 - 2.042252) * -210742.65 / 100000.0
+score := score + (macd_hist_1 - -0.018833) * 802410.81 / 100000.0
+score := score + (ema_2 - 1.863560) * -146917.24 / 100000.0
+score := score + (macd_2 - 0.003724) * -756379.20 / 100000.0
+score := score + (sma_1 - 1.985680) * -241729.48 / 100000.0
+score := score + (close - 2.104359) * -226872.88 / 100000.0
+score := score + (macd_hist_2 - 0.031727) * -551516.10 / 100000.0
+
+// === STRATEGY LOGIC ===
+longThreshold = 1.0
+shortThreshold = -1.0
+closeThreshold = 0.5
+minBars = 200  // Warmup period for indicators
+
+// Track position state
+var int positionState = 0  // 0=none, 1=long, -1=short
+
+// Skip first N bars (indicator warmup period)
+if bar_index >= minBars
+    // Open Long (only if no position)
+    if score > longThreshold and positionState == 0
+        strategy.entry("Long", strategy.long)
+        positionState := 1
+
+    // Open Short (only if no position)
+    if score < shortThreshold and positionState == 0
+        strategy.entry("Short", strategy.short)
+        positionState := -1
+
+    // Close Long (if in long and score drops)
+    if score < -closeThreshold and positionState == 1
+        strategy.close("Long")
+        positionState := 0
+
+    // Close Short (if in short and score rises)
+    if score > closeThreshold and positionState == -1
+        strategy.close("Short")
+        positionState := 0
+
+// === PLOTS ===
+plot(score, color=score > 0 ? color.green : color.red, title="Score")
+hline(longThreshold, "Long", color=color.green, linestyle=hline.style_dotted)
+hline(shortThreshold, "Short", color=color.red, linestyle=hline.style_dotted)
+bgcolor(bar_index < minBars ? color.new(color.gray, 90) : na, title="Warmup")

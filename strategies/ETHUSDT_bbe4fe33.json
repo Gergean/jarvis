@@ -1,0 +1,112 @@
+{
+  "id": "ETHUSDT_bbe4fe33",
+  "symbol": "ETHUSDT",
+  "created_at": "2025-12-23T20:48:05.651997",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 50,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 13,
+            "slow": 31,
+            "signal": 10
+          }
+        },
+        "target": -20.677112124467538,
+        "weight": -467819.375420294
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 3098.051757942946,
+        "weight": 14344.286634996533
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 30
+          }
+        },
+        "target": 52.085095582261005,
+        "weight": 410176.00260348665
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 200
+          }
+        },
+        "target": 3412.792614501416,
+        "weight": -82553.31607896271
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 198
+          }
+        },
+        "target": 3071.2326388226616,
+        "weight": -849148.3847672008
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 12,
+            "slow": 31,
+            "signal": 13
+          }
+        },
+        "target": -50.346390612787154,
+        "weight": 704562.2544066377
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 2818.6843509650867,
+        "weight": 142272.35016074358
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 20
+          }
+        },
+        "target": 21.82946316514307,
+        "weight": -673913.028245158
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 7
+          }
+        },
+        "target": 51.461902526351494,
+        "weight": -881293.1025258532
+      }
+    ],
+    "fitness": -14.687317645105267
+  }
+}

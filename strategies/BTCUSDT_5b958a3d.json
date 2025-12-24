@@ -1,0 +1,108 @@
+{
+  "id": "BTCUSDT_5b958a3d",
+  "symbol": "BTCUSDT",
+  "created_at": "2025-12-23T15:38:08.319446",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 20,
+    "population_size": 50,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 72147.65645761136,
+        "weight": -0.7549741313365972
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 30
+          }
+        },
+        "target": 26.63320646919533,
+        "weight": -0.7581880332218849
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 69224.29631049884,
+        "weight": -0.40413249490101266
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 71
+          }
+        },
+        "target": 70577.62642138515,
+        "weight": -0.0673214581978776
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 143
+          }
+        },
+        "target": 100082.75934813937,
+        "weight": -0.9843543201445631
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 198
+          }
+        },
+        "target": 90698.085305449,
+        "weight": -0.04116011838744285
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 83651.67226577742,
+        "weight": -0.40885649894026077
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 181
+          }
+        },
+        "target": 99027.48818711449,
+        "weight": -0.7676459547324757
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 12
+          }
+        },
+        "target": 27.75063661377892,
+        "weight": 0.6820535563390688
+      }
+    ],
+    "fitness": -12.16888067642413
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "id": "SOLUSDT_739a3e8f",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-23T17:31:19.689858",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 50,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 15,
+            "slow": 36,
+            "signal": 7
+          }
+        },
+        "target": -1.0323844689608497,
+        "weight": 334314.5041903632
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 151.3956259464453,
+        "weight": -874572.2579548007
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 27
+          }
+        },
+        "target": 67.56137228081519,
+        "weight": 414494.5220727449
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 145
+          }
+        },
+        "target": 149.92591992833025,
+        "weight": -617005.5174869075
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 194
+          }
+        },
+        "target": 114.71422101621249,
+        "weight": 427345.5052524279
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 13,
+            "slow": 34,
+            "signal": 6
+          }
+        },
+        "target": 1.0346309039934272,
+        "weight": 301229.7063708072
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 127
+          }
+        },
+        "target": 135.8256030643233,
+        "weight": -268847.8892995171
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 6,
+            "slow": 26,
+            "signal": 9
+          }
+        },
+        "target": -0.49554804225238613,
+        "weight": 527584.7206373471
+      }
+    ],
+    "fitness": 20.56541884737102
+  }
+}

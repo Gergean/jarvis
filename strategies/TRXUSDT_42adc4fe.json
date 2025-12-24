@@ -1,0 +1,104 @@
+{
+  "id": "TRXUSDT_42adc4fe",
+  "symbol": "TRXUSDT",
+  "created_at": "2025-12-23T15:48:30.287536",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 20,
+    "population_size": 50,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 18,
+            "slow": 38,
+            "signal": 14
+          }
+        },
+        "target": -0.0013723736435171635,
+        "weight": -0.1703953040367887
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 71
+          }
+        },
+        "target": 0.26815908871526944,
+        "weight": -0.20352101153173408
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 100
+          }
+        },
+        "target": 0.27098293866833856,
+        "weight": -0.0031012350566901326
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 157
+          }
+        },
+        "target": 0.25608428488552243,
+        "weight": -0.9525260037734846
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 96
+          }
+        },
+        "target": 0.2925486997885434,
+        "weight": 0.22843332183979714
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 20,
+            "slow": 33,
+            "signal": 5
+          }
+        },
+        "target": 0.004618395183682126,
+        "weight": -0.028909961419027574
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.33088089830937306,
+        "weight": -0.25155077243985424
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 6,
+            "slow": 23,
+            "signal": 14
+          }
+        },
+        "target": 0.0004754601401519612,
+        "weight": -0.008394835020545832
+      }
+    ],
+    "fitness": 0.0
+  }
+}

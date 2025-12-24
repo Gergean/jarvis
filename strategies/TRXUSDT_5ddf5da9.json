@@ -1,0 +1,106 @@
+{
+  "id": "TRXUSDT_5ddf5da9",
+  "symbol": "TRXUSDT",
+  "created_at": "2025-12-23T17:29:18.838448",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 50,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 12,
+            "slow": 40,
+            "signal": 13
+          }
+        },
+        "target": 0.0023164365567294987,
+        "weight": 0.3928986605880127
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 14,
+            "slow": 26,
+            "signal": 5
+          }
+        },
+        "target": 6.924987904270244e-05,
+        "weight": -0.06255321394789615
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 104
+          }
+        },
+        "target": 0.3384831006197175,
+        "weight": 0.9073451157414756
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 41
+          }
+        },
+        "target": 0.24661657699750472,
+        "weight": -0.07835079378724297
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 11,
+            "slow": 33,
+            "signal": 11
+          }
+        },
+        "target": 0.003646469964748361,
+        "weight": -0.09808318337784683
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.24637348843704768,
+        "weight": -0.4259423450306863
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 13,
+            "slow": 27,
+            "signal": 11
+          }
+        },
+        "target": 0.0009826109945897804,
+        "weight": 0.18572909461699627
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 91
+          }
+        },
+        "target": 0.227429866786159,
+        "weight": 0.994800643454699
+      }
+    ],
+    "fitness": 0.0
+  }
+}

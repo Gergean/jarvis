@@ -1,0 +1,102 @@
+{
+  "id": "BTCUSDT_e5babbb4",
+  "symbol": "BTCUSDT",
+  "created_at": "2025-12-24T07:25:06.426030",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-12-24",
+    "end_date": "2025-12-24",
+    "generations": 100,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 85928.12063270836,
+        "weight": -223450.22088840837
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 15
+          }
+        },
+        "target": 69505.94654852795,
+        "weight": -180718.62375413114
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 15,
+            "slow": 25,
+            "signal": 14
+          }
+        },
+        "target": -1278.0773081480572,
+        "weight": -436643.84976761776
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 162
+          }
+        },
+        "target": 82205.50782650981,
+        "weight": -421785.2969650915
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 61
+          }
+        },
+        "target": 70642.446757522,
+        "weight": 246808.72581620258
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 18
+          }
+        },
+        "target": 31.924396505301818,
+        "weight": -462361.48750855844
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 36
+          }
+        },
+        "target": 99605.39839869998,
+        "weight": -252373.04213339137
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 7,
+            "slow": 21,
+            "signal": 6
+          }
+        },
+        "target": 437.0015723145967,
+        "weight": 549042.5219199918
+      }
+    ],
+    "fitness": -6.634368666102237
+  }
+}

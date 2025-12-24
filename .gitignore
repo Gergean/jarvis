@@ -24,3 +24,6 @@ data/
 
 # Charts
 charts/
+
+# Paper trading artifacts
+paper/

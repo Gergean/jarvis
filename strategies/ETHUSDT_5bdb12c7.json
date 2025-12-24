@@ -1,0 +1,102 @@
+{
+  "id": "ETHUSDT_5bdb12c7",
+  "symbol": "ETHUSDT",
+  "created_at": "2025-12-23T17:21:35.037314",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 30,
+    "population_size": 50,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 154
+          }
+        },
+        "target": 2556.472978061522,
+        "weight": -44457.22485114523
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 135
+          }
+        },
+        "target": 3180.292266314827,
+        "weight": -13968.071192908468
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 7
+          }
+        },
+        "target": 20.381751814288815,
+        "weight": -57325.80513089731
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 2753.131359257082,
+        "weight": -11640.813606281545
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 16,
+            "slow": 40,
+            "signal": 15
+          }
+        },
+        "target": -28.1562176622885,
+        "weight": 71720.39704382406
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 6,
+            "slow": 27,
+            "signal": 10
+          }
+        },
+        "target": 29.34584152725958,
+        "weight": -31931.289457893465
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 2423.6123314592032,
+        "weight": -865.4771274188303
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 127
+          }
+        },
+        "target": 2894.355593195407,
+        "weight": -59732.66998531945
+      }
+    ],
+    "fitness": 34.69577580309885
+  }
+}

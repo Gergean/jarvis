@@ -1,0 +1,104 @@
+{
+  "id": "BTCUSDT_1ca310a2",
+  "symbol": "BTCUSDT",
+  "created_at": "2025-12-23T13:54:59.476707",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-06-01",
+    "end_date": "2024-09-01",
+    "generations": 10,
+    "population_size": 30,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 68604.3845915027,
+        "weight": 0.03259624553448126
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 11
+          }
+        },
+        "target": 59.6002373298292,
+        "weight": 0.4963034606471908
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 17,
+            "slow": 35,
+            "signal": 10
+          }
+        },
+        "target": -546.965663838613,
+        "weight": -0.7119030143003464
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 6,
+            "slow": 12,
+            "signal": 8
+          }
+        },
+        "target": -229.87184979683323,
+        "weight": 0.5286460067374041
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 24
+          }
+        },
+        "target": 60569.44874461199,
+        "weight": 0.021042694126579997
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 183
+          }
+        },
+        "target": 64229.072428586536,
+        "weight": -0.9618903639933893
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 7,
+            "slow": 28,
+            "signal": 6
+          }
+        },
+        "target": 805.5581479900526,
+        "weight": -0.02355115196622748
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 53679.561042955145,
+        "weight": 0.032724146459169434
+      }
+    ],
+    "fitness": 8.409633233722602
+  }
+}

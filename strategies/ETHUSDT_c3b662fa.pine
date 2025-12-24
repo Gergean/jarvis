@@ -1,0 +1,67 @@
+//@version=5
+strategy("ETHUSDT GA Strategy", overlay=true, initial_capital=100, default_qty_type=strategy.percent_of_equity, default_qty_value=20, commission_type=strategy.commission.percent, commission_value=0.1)
+
+// === INDICATORS ===
+sma_1 = ta.sma(close, 155)
+sma_2 = ta.sma(close, 135)
+rsi_1 = ta.rsi(close, 7)
+[macd_1, macd_1_sig, macd_1_hist] = ta.macd(close, 16, 40, 15)
+[macd_2, macd_2_sig, macd_2_hist] = ta.macd(close, 7, 33, 8)
+sma_3 = ta.sma(close, 127)
+
+// === NaN HANDLING (match Python fallback values) ===
+sma_1 := na(sma_1) ? 0.0 : sma_1
+sma_2 := na(sma_2) ? 0.0 : sma_2
+rsi_1 := na(rsi_1) ? 50.0 : rsi_1
+macd_1 := na(macd_1) ? 0.0 : macd_1
+macd_2 := na(macd_2) ? 0.0 : macd_2
+sma_3 := na(sma_3) ? 0.0 : sma_3
+
+// === SIGNAL CALCULATION ===
+// Formula: score = sum((indicator_value - target) * weight)
+score = 0.0
+score := score + (sma_1 - 2556.4730) * -0.444572
+score := score + (sma_2 - 3304.6978) * -0.139681
+score := score + (rsi_1 - 20.3818) * -0.573258
+score := score + (close - 2753.1314) * -0.108551
+score := score + (macd_1 - -28.1562) * 0.717204
+score := score + (macd_2 - 29.3458) * -0.369015
+score := score + (close - 2423.6123) * -0.008655
+score := score + (sma_3 - 2894.3556) * -0.597327
+
+// === STRATEGY LOGIC ===
+longThreshold = 1.0
+shortThreshold = -1.0
+closeThreshold = 0.5
+minBars = 200  // Warmup period for indicators
+
+// Track position state
+var int positionState = 0  // 0=none, 1=long, -1=short
+
+// Skip first N bars (indicator warmup period)
+if bar_index >= minBars
+    // Open Long (only if no position)
+    if score > longThreshold and positionState == 0
+        strategy.entry("Long", strategy.long)
+        positionState := 1
+
+    // Open Short (only if no position)
+    if score < shortThreshold and positionState == 0
+        strategy.entry("Short", strategy.short)
+        positionState := -1
+
+    // Close Long (if in long and score drops)
+    if score < -closeThreshold and positionState == 1
+        strategy.close("Long")
+        positionState := 0
+
+    // Close Short (if in short and score rises)
+    if score > closeThreshold and positionState == -1
+        strategy.close("Short")
+        positionState := 0
+
+// === PLOTS ===
+plot(score, color=score > 0 ? color.green : color.red, title="Score")
+hline(longThreshold, "Long", color=color.green, linestyle=hline.style_dotted)
+hline(shortThreshold, "Short", color=color.red, linestyle=hline.style_dotted)
+bgcolor(bar_index < minBars ? color.new(color.gray, 90) : na, title="Warmup")

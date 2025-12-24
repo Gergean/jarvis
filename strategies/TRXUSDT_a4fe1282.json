@@ -1,0 +1,94 @@
+{
+  "id": "TRXUSDT_a4fe1282",
+  "symbol": "TRXUSDT",
+  "created_at": "2025-12-23T17:19:48.349628",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 50,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.2930627673696954,
+        "weight": -639229.1052971738
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 5,
+            "slow": 33,
+            "signal": 13
+          }
+        },
+        "target": -0.004349550671914542,
+        "weight": -244671.95734674658
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.23876622919734303,
+        "weight": -749807.9828662041
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 8,
+            "slow": 38,
+            "signal": 6
+          }
+        },
+        "target": -0.001190341266156984,
+        "weight": 273438.28933082824
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 6,
+            "slow": 30,
+            "signal": 5
+          }
+        },
+        "target": 0.0011739679943357352,
+        "weight": 225483.3061756424
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.2804557190671223,
+        "weight": -229188.80667439252
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.2804557190671223,
+        "weight": -244495.44518655838
+      }
+    ],
+    "fitness": 16.835211287633964
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "rules": [
+    {
+      "indicator": {
+        "type": "MACD",
+        "params": {
+          "fast": 11,
+          "slow": 34,
+          "signal": 12
+        }
+      },
+      "target": -20.677112124467538,
+      "weight": -473685.1477261656
+    },
+    {
+      "indicator": {
+        "type": "PRICE",
+        "params": {
+          "period": 1
+        }
+      },
+      "target": 3641.958147175959,
+      "weight": -466744.23772861547
+    },
+    {
+      "indicator": {
+        "type": "RSI",
+        "params": {
+          "period": 24
+        }
+      },
+      "target": 60.74689249896838,
+      "weight": 155464.25820735632
+    },
+    {
+      "indicator": {
+        "type": "EMA",
+        "params": {
+          "period": 30
+        }
+      },
+      "target": 3412.792614501416,
+      "weight": -82553.31607896271
+    },
+    {
+      "indicator": {
+        "type": "EMA",
+        "params": {
+          "period": 33
+        }
+      },
+      "target": 4278.676400740508,
+      "weight": -930550.6193286479
+    },
+    {
+      "indicator": {
+        "type": "RSI",
+        "params": {
+          "period": 20
+        }
+      },
+      "target": 23.953747249965534,
+      "weight": -478427.0945612018
+    },
+    {
+      "indicator": {
+        "type": "RSI",
+        "params": {
+          "period": 8
+        }
+      },
+      "target": 54.59300428571857,
+      "weight": -881293.1025258532
+    },
+    {
+      "indicator": {
+        "type": "RSI",
+        "params": {
+          "period": 7
+        }
+      },
+      "target": 51.461902526351494,
+      "weight": -881293.1025258532
+    }
+  ],
+  "fitness": 3.9820146607752074
+}

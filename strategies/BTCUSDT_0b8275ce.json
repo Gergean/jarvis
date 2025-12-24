@@ -1,0 +1,98 @@
+{
+  "id": "BTCUSDT_0b8275ce",
+  "symbol": "BTCUSDT",
+  "created_at": "2025-12-23T13:52:08.253957",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-06-01",
+    "end_date": "2024-09-01",
+    "generations": 10,
+    "population_size": 30,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 24
+          }
+        },
+        "target": 40.85615293600191,
+        "weight": -0.6296502035665545
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 17
+          }
+        },
+        "target": 50.492453415203045,
+        "weight": -0.8054641441648442
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 28
+          }
+        },
+        "target": 70.19377624918376,
+        "weight": 0.5359581573816414
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 14
+          }
+        },
+        "target": 21.489573236823958,
+        "weight": -0.43675304275244176
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 14
+          }
+        },
+        "target": 21.489573236823958,
+        "weight": -0.48386852270569936
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 68675.2568138807,
+        "weight": -0.32279639026666374
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 68675.2568138807,
+        "weight": -0.32279639026666374
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 119
+          }
+        },
+        "target": 54329.04803983221,
+        "weight": -0.4977907380013591
+      }
+    ],
+    "fitness": 10.697995045588822
+  }
+}

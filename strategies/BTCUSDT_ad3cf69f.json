@@ -1,0 +1,102 @@
+{
+  "id": "BTCUSDT_ad3cf69f",
+  "symbol": "BTCUSDT",
+  "created_at": "2025-12-23T13:45:08.850082",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-01",
+    "generations": 5,
+    "population_size": 20,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 47101.41202827054,
+        "weight": -0.37012154990517776
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 13,
+            "slow": 20,
+            "signal": 14
+          }
+        },
+        "target": 330.6124058516021,
+        "weight": -0.4495081129119274
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 53
+          }
+        },
+        "target": 47054.634061583725,
+        "weight": -0.781698749750412
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 55876.79041234886,
+        "weight": 0.16436557453071
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 8333074.859365009,
+        "weight": -0.2247035344789956
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 58475.78032370222,
+        "weight": 0.6647694855546407
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 14,
+            "slow": 20,
+            "signal": 14
+          }
+        },
+        "target": 842.9728543726973,
+        "weight": 0.615927025268558
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 9
+          }
+        },
+        "target": 63.15673216867203,
+        "weight": 0.25692121697374004
+      }
+    ],
+    "fitness": 0.0
+  }
+}

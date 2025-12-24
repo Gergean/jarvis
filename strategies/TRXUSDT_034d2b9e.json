@@ -1,0 +1,84 @@
+{
+  "id": "TRXUSDT_034d2b9e",
+  "symbol": "TRXUSDT",
+  "created_at": "2025-12-23T15:50:57.247146",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 50,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 34
+          }
+        },
+        "target": 0.3091926094650204,
+        "weight": 0.38228645570028696
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 20,
+            "slow": 33,
+            "signal": 8
+          }
+        },
+        "target": 0.0012206769776292703,
+        "weight": 0.42967061581890054
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 24
+          }
+        },
+        "target": 53.38430980207702,
+        "weight": -0.04753866863526643
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 18,
+            "slow": 27,
+            "signal": 15
+          }
+        },
+        "target": -0.0017562408823713507,
+        "weight": 0.6898068667559565
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 16,
+            "slow": 30,
+            "signal": 6
+          }
+        },
+        "target": -0.001542612180361213,
+        "weight": -0.30953426484696406
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.3202037144729039,
+        "weight": 0.027040765443498205
+      }
+    ],
+    "fitness": 9.006038088211097
+  }
+}

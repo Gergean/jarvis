@@ -1,0 +1,106 @@
+{
+  "id": "XRPUSDT_761b053e",
+  "symbol": "XRPUSDT",
+  "created_at": "2025-12-23T18:02:35.683181",
+  "training": {
+    "interval": "1d",
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-01",
+    "generations": 50,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 19,
+            "slow": 38,
+            "signal": 13
+          }
+        },
+        "target": -0.024959431590893,
+        "weight": -697288.9278150259
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 127
+          }
+        },
+        "target": 2.0422520435985874,
+        "weight": -210742.65259954767
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 5,
+            "slow": 23,
+            "signal": 13
+          }
+        },
+        "target": -0.01883303967303433,
+        "weight": 802410.8096444249
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 176
+          }
+        },
+        "target": 1.8635599681545036,
+        "weight": -146917.2374855338
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 5,
+            "slow": 33,
+            "signal": 10
+          }
+        },
+        "target": 0.003724084463115125,
+        "weight": -756379.2004047065
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 110
+          }
+        },
+        "target": 1.9856797960307278,
+        "weight": -241729.48282051337
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 2.104359359115019,
+        "weight": -226872.87732098135
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 5,
+            "slow": 20,
+            "signal": 13
+          }
+        },
+        "target": 0.03172737940849577,
+        "weight": -551516.1003782284
+      }
+    ],
+    "fitness": 24.15407702484137
+  }
+}

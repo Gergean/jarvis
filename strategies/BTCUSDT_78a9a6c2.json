@@ -1,0 +1,92 @@
+{
+  "id": "BTCUSDT_78a9a6c2",
+  "symbol": "BTCUSDT",
+  "created_at": "2025-12-23T13:56:21.210889",
+  "training": {
+    "interval": "1d",
+    "start_date": "2023-01-01",
+    "end_date": "2024-12-01",
+    "generations": 20,
+    "population_size": 50,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 13,
+            "slow": 24,
+            "signal": 10
+          }
+        },
+        "target": -1060.2473666542166,
+        "weight": -0.060087737468441205
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 16,
+            "slow": 22,
+            "signal": 6
+          }
+        },
+        "target": -212.22984503888102,
+        "weight": 0.5241010268055071
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 82966.61217032316,
+        "weight": 0.28303670733337394
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 82820.43680482132,
+        "weight": 0.6711706631587158
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 79382.11445394933,
+        "weight": -0.13241470288176482
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 114278.28697974268,
+        "weight": -0.5466247645228575
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 114278.28697974268,
+        "weight": -0.5466247645228575
+      }
+    ],
+    "fitness": -15.116581139031485
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "id": "TRXUSDT_30f15092",
+  "symbol": "TRXUSDT",
+  "created_at": "2025-12-23T16:15:12.643448",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-10-01",
+    "end_date": "2025-01-01",
+    "generations": 30,
+    "population_size": 50,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 11,
+            "slow": 37,
+            "signal": 14
+          }
+        },
+        "target": -0.00482392469335153,
+        "weight": -0.29513220264290774
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 106
+          }
+        },
+        "target": 0.20953679303141362,
+        "weight": -0.40991802929775667
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.279841429131457,
+        "weight": -0.12905480325618113
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 17,
+            "slow": 40,
+            "signal": 9
+          }
+        },
+        "target": 0.0011836613777538257,
+        "weight": 0.7230560352843478
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 102
+          }
+        },
+        "target": 0.22885455353348086,
+        "weight": -0.7869252037134569
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.23631235132263106,
+        "weight": 0.33181255844240765
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.2717827705748715,
+        "weight": -0.4103736608475568
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 0.2171093475533886,
+        "weight": 0.7979111121120155
+      }
+    ],
+    "fitness": 0.0
+  }
+}
