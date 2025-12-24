@@ -18,3 +18,9 @@ logs/*.log*
 
 # OS
 .DS_Store
+
+# Data (can be re-downloaded)
+data/
+
+# Charts
+charts/
