@@ -4,7 +4,6 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from functools import partial
 from multiprocessing import Pool, cpu_count
 
 import enlighten
@@ -16,7 +15,16 @@ from jarvis.commands.download import download
 from jarvis.genetics.indicators import OHLCV
 from jarvis.genetics.individual import Individual
 from jarvis.genetics.population import Population
-from jarvis.genetics.strategy import Strategy, TestResult, TrainingConfig
+from jarvis.genetics.strategy import (
+    RuleContribution,
+    Strategy,
+    TestResult,
+    TradeSignal,
+    TrainingConfig,
+)
+from jarvis.genetics.strategy import (
+    WindowResult as WindowResultModel,
+)
 from jarvis.logging import logger
 from jarvis.models import (
     DEFAULT_LEVERAGE,
@@ -37,6 +45,7 @@ class WindowData:
     test_start: datetime
     test_end: datetime
     ohlcv_data: list[tuple[OHLCV, Decimal, int]]  # (ohlcv, price, candle_idx)
+    timestamps: list[datetime]  # Timestamp for each candle in ohlcv_data
     funding_interval_candles: int
 
 
@@ -61,7 +70,21 @@ def _run_backtest_on_preloaded(
     leverage: int = DEFAULT_LEVERAGE,
     funding_enabled: bool = True,
 ) -> dict:
-    """Run backtest on preloaded OHLCV data."""
+    """Run backtest on preloaded OHLCV data.
+
+    IMPORTANT: Only COMPLETED trades count toward return calculation.
+    If a position is still open at the end, we DO NOT include its unrealized PnL.
+
+    Why? Because:
+    - We only measure what the STRATEGY decided, not what WE decided
+    - The strategy opened a position but didn't close it = no decision made yet
+    - Including unrealized PnL would reward/punish based on arbitrary end date
+    - This keeps fitness evaluation fair and consistent
+
+    The open position's margin stays "frozen" in position_margin, reducing
+    available balance but not affecting realized return calculation.
+    """
+    # Empty data = no trades possible
     if not ohlcv_data:
         return {
             "return_pct": 0.0,
@@ -69,6 +92,201 @@ def _run_backtest_on_preloaded(
             "total_trades": 0,
             "liquidated": False,
         }
+
+    # === ACCOUNT STATE ===
+    # margin_balance: Available cash (not locked in positions)
+    margin_balance = starting_margin
+
+    # === POSITION STATE ===
+    # position_side: Current position direction (NONE = no position)
+    position_side = PositionSide.NONE
+    # position_entry_price: Price at which we entered the position
+    position_entry_price = Decimal(0)
+    # position_quantity: Size of position in base asset (e.g., BTC amount)
+    position_quantity = Decimal(0)
+    # position_margin: Collateral locked for this position
+    position_margin = Decimal(0)
+
+    # === TRACKING VARIABLES ===
+    # peak_equity: Highest equity seen (for drawdown calculation)
+    peak_equity = starting_margin
+    # max_drawdown_pct: Largest peak-to-trough decline in equity
+    max_drawdown_pct = 0.0
+    # total_trades: Number of completed round-trip trades (entry + exit)
+    total_trades = 0
+    # last_funding_candle: Last candle index when funding was applied
+    last_funding_candle = 0
+    # price: Current candle's close price
+    price = Decimal(0)
+    # liquidated: Whether position was liquidated (margin call)
+    liquidated = False
+
+    # === MAIN LOOP: Process each candle ===
+    for ohlcv, price, candle_idx in ohlcv_data:
+
+        # --- STEP 1: Check for liquidation (only with leverage > 1) ---
+        # Liquidation occurs when losses exceed margin (simplified model)
+        if position_side != PositionSide.NONE and leverage > 1:
+            if position_side == PositionSide.LONG:
+                # Long liquidation: price drops below entry * (1 - 1/leverage)
+                liq_price = position_entry_price * (1 - Decimal(1) / Decimal(leverage))
+                if price <= liq_price:
+                    liquidated = True
+                    break
+            else:
+                # Short liquidation: price rises above entry * (1 + 1/leverage)
+                liq_price = position_entry_price * (1 + Decimal(1) / Decimal(leverage))
+                if price >= liq_price:
+                    liquidated = True
+                    break
+
+        # --- STEP 2: Apply funding fee (every 8 hours in futures) ---
+        # Funding is paid/received periodically when holding a position
+        if funding_enabled and position_side != PositionSide.NONE:
+            candles_since_funding = candle_idx - last_funding_candle
+            if candles_since_funding >= funding_interval_candles:
+                # Calculate how many funding periods passed
+                num_funding_periods = candles_since_funding // funding_interval_candles
+                # Funding is based on notional value (position size * price)
+                notional = position_quantity * price
+                funding_payment = notional * FUNDING_FEE_RATE * num_funding_periods
+                if position_side == PositionSide.LONG:
+                    # Longs PAY funding (cost)
+                    margin_balance -= funding_payment
+                else:
+                    # Shorts RECEIVE funding (income)
+                    margin_balance += funding_payment
+                last_funding_candle = candle_idx
+
+        # --- STEP 3: Calculate equity for drawdown tracking ---
+        # Equity = available margin + locked margin + unrealized PnL
+        # We track this for drawdown even though we don't use unrealized PnL for final return
+        equity = margin_balance
+        if position_side != PositionSide.NONE:
+            if position_side == PositionSide.LONG:
+                # Long profit: current price > entry price
+                unrealized_pnl = position_quantity * (price - position_entry_price)
+            else:
+                # Short profit: entry price > current price
+                unrealized_pnl = position_quantity * (position_entry_price - price)
+            # Equity includes locked margin and paper profit/loss
+            equity += position_margin + unrealized_pnl
+
+        # Update peak equity (highest point seen)
+        if equity > peak_equity:
+            peak_equity = equity
+        # Calculate drawdown from peak
+        if peak_equity > 0:
+            drawdown_pct = float((peak_equity - equity) / peak_equity * 100)
+            if drawdown_pct > max_drawdown_pct:
+                max_drawdown_pct = drawdown_pct
+
+        # --- STEP 4: Get strategy signal and execute ---
+        signal = individual.get_signal(ohlcv, position_side)
+
+        # OPEN LONG: Strategy says go long and we have no position
+        if signal == ActionType.LONG and position_side == PositionSide.NONE:
+            # Use investment_ratio of available margin (e.g., 20%)
+            margin_to_use = margin_balance * investment_ratio
+            if margin_to_use > 0 and price > 0:
+                # Position size = (margin * leverage) / price
+                position_size = (margin_to_use * leverage) / price
+                # Pay entry fee (taker fee on notional value)
+                fee = position_size * price * commission_ratio
+                margin_balance -= fee
+                # Record position details
+                position_side = PositionSide.LONG
+                position_entry_price = price
+                position_quantity = position_size
+                position_margin = margin_to_use
+                # Lock margin (move from available to position)
+                margin_balance -= margin_to_use
+                total_trades += 1
+
+        # OPEN SHORT: Strategy says go short and we have no position
+        elif signal == ActionType.SHORT and position_side == PositionSide.NONE:
+            margin_to_use = margin_balance * investment_ratio
+            if margin_to_use > 0 and price > 0:
+                position_size = (margin_to_use * leverage) / price
+                fee = position_size * price * commission_ratio
+                margin_balance -= fee
+                position_side = PositionSide.SHORT
+                position_entry_price = price
+                position_quantity = position_size
+                position_margin = margin_to_use
+                margin_balance -= margin_to_use
+                total_trades += 1
+
+        # CLOSE POSITION: Strategy says close and we have a position
+        elif signal == ActionType.CLOSE and position_side != PositionSide.NONE:
+            # Calculate realized PnL
+            if position_side == PositionSide.LONG:
+                pnl = position_quantity * (price - position_entry_price)
+            else:
+                pnl = position_quantity * (position_entry_price - price)
+
+            # Pay exit fee
+            fee = position_quantity * price * commission_ratio
+            # Return margin + PnL - fee to available balance
+            margin_balance += position_margin + pnl - fee
+            # Clear position state
+            position_side = PositionSide.NONE
+            position_quantity = Decimal(0)
+            position_margin = Decimal(0)
+            total_trades += 1
+
+    # === FINAL RETURN CALCULATION ===
+    # CRITICAL: We only count margin_balance (realized gains)
+    # If position is still open, position_margin is "frozen" but NOT counted as profit/loss
+    # This ensures we only measure what the strategy actually decided to realize
+    final_equity = margin_balance
+
+    # If still in position, add back the locked margin (but NOT unrealized PnL)
+    # This way: final_equity = starting - fees - losses + gains
+    # Open position margin is returned but its paper profit/loss is ignored
+    if not liquidated and position_side != PositionSide.NONE:
+        final_equity += position_margin
+
+    # Calculate return percentage
+    if liquidated:
+        # Liquidation = total loss
+        return_pct = -100.0
+    else:
+        return_pct = float((final_equity - starting_margin) / starting_margin * 100)
+
+    return {
+        "return_pct": return_pct,
+        "max_drawdown_pct": max_drawdown_pct,
+        "total_trades": total_trades,
+        "liquidated": liquidated,
+    }
+
+
+def _run_backtest_with_signals(
+    individual: Individual,
+    ohlcv_data: list[tuple[OHLCV, Decimal, int]],
+    timestamps: list[datetime],
+    funding_interval_candles: int,
+    starting_margin: Decimal = Decimal("100"),
+    commission_ratio: Decimal = FUTURES_TAKER_FEE,
+    investment_ratio: Decimal = Decimal("0.2"),
+    leverage: int = DEFAULT_LEVERAGE,
+    funding_enabled: bool = True,
+) -> tuple[dict, list[TradeSignal]]:
+    """Run backtest capturing all trading signals with rule contributions.
+
+    Same as _run_backtest_on_preloaded but also captures detailed signal info.
+    Used for final evaluation after training, not during evolution (too slow).
+    """
+    signals: list[TradeSignal] = []
+
+    if not ohlcv_data:
+        return {
+            "return_pct": 0.0,
+            "max_drawdown_pct": 0.0,
+            "total_trades": 0,
+            "liquidated": False,
+        }, signals
 
     margin_balance = starting_margin
     position_side = PositionSide.NONE
@@ -83,7 +301,7 @@ def _run_backtest_on_preloaded(
     price = Decimal(0)
     liquidated = False
 
-    for ohlcv, price, candle_idx in ohlcv_data:
+    for data_idx, (ohlcv, price, candle_idx) in enumerate(ohlcv_data):
         # Check liquidation
         if position_side != PositionSide.NONE and leverage > 1:
             if position_side == PositionSide.LONG:
@@ -129,6 +347,44 @@ def _run_backtest_on_preloaded(
         # Get signal
         signal = individual.get_signal(ohlcv, position_side)
 
+        # Capture signal details if there's an action
+        if signal in (ActionType.LONG, ActionType.SHORT, ActionType.CLOSE):
+            # Calculate total score and rule contributions
+            rule_contributions = []
+            total_score = 0.0
+            for rule in individual.rules:
+                value, target, contribution = rule.calculate_contribution_detailed(ohlcv)
+                total_score += contribution
+                rule_contributions.append(
+                    RuleContribution(
+                        rule_str=str(rule),
+                        value=value,
+                        target=target,
+                        contribution=contribution,
+                    )
+                )
+
+            # Get timestamp for this candle
+            ts = timestamps[data_idx] if data_idx < len(timestamps) else datetime.utcnow()
+
+            trade_signal = TradeSignal(
+                timestamp=ts.isoformat(),
+                action=signal.name,
+                price=float(price),
+                score=total_score,
+                rule_contributions=rule_contributions,
+            )
+
+            # Only record if it's an actual trade (state change)
+            will_trade = (
+                (signal == ActionType.LONG and position_side == PositionSide.NONE)
+                or (signal == ActionType.SHORT and position_side == PositionSide.NONE)
+                or (signal == ActionType.CLOSE and position_side != PositionSide.NONE)
+            )
+            if will_trade:
+                signals.append(trade_signal)
+
+        # Execute trade logic (same as original)
         if signal == ActionType.LONG and position_side == PositionSide.NONE:
             margin_to_use = margin_balance * investment_ratio
             if margin_to_use > 0 and price > 0:
@@ -168,14 +424,13 @@ def _run_backtest_on_preloaded(
             position_margin = Decimal(0)
             total_trades += 1
 
-    # Final equity
+    # === FINAL RETURN CALCULATION ===
+    # Only count realized gains - open positions don't count toward PnL
     final_equity = margin_balance
-    if not liquidated and position_side != PositionSide.NONE and price > 0:
-        if position_side == PositionSide.LONG:
-            unrealized_pnl = position_quantity * (price - position_entry_price)
-        else:
-            unrealized_pnl = position_quantity * (position_entry_price - price)
-        final_equity += position_margin + unrealized_pnl
+
+    # Return locked margin but NOT unrealized PnL
+    if not liquidated and position_side != PositionSide.NONE:
+        final_equity += position_margin
 
     if liquidated:
         return_pct = -100.0
@@ -187,7 +442,7 @@ def _run_backtest_on_preloaded(
         "max_drawdown_pct": max_drawdown_pct,
         "total_trades": total_trades,
         "liquidated": liquidated,
-    }
+    }, signals
 
 
 def _evaluate_individual_on_windows(
@@ -305,6 +560,7 @@ def _preload_window_data(
         )
 
         ohlcv_data = []
+        timestamps = []
         if all_klines:
             n = len(all_klines)
             open_arr = np.zeros(n, dtype=np.float64)
@@ -312,6 +568,7 @@ def _preload_window_data(
             low_arr = np.zeros(n, dtype=np.float64)
             close_arr = np.zeros(n, dtype=np.float64)
             volume_arr = np.zeros(n, dtype=np.float64)
+            kline_timestamps = []
 
             for j, k in enumerate(all_klines):
                 open_arr[j] = float(k.open)
@@ -319,6 +576,7 @@ def _preload_window_data(
                 low_arr[j] = float(k.low)
                 close_arr[j] = float(k.close)
                 volume_arr[j] = float(k.volume)
+                kline_timestamps.append(k.open_time)
 
             for j in range(lookback, n):
                 start_idx = j - lookback + 1
@@ -332,6 +590,7 @@ def _preload_window_data(
                 )
                 price = Decimal(str(close_arr[j]))
                 ohlcv_data.append((ohlcv, price, j))
+                timestamps.append(kline_timestamps[j])
 
         window_data_list.append(
             WindowData(
@@ -339,6 +598,7 @@ def _preload_window_data(
                 test_start=test_start,
                 test_end=test_end,
                 ohlcv_data=ohlcv_data,
+                timestamps=timestamps,
                 funding_interval_candles=funding_interval_candles,
             )
         )
@@ -632,12 +892,54 @@ def train(
         )
 
     logger.info("-" * 40)
-    logger.info("Positive windows: %d/%d (%.0f%%)", positive_windows, len(best_results), 100 * positive_windows / len(best_results))
+    logger.info(
+        "Positive windows: %d/%d (%.0f%%)",
+        positive_windows,
+        len(best_results),
+        100 * positive_windows / len(best_results),
+    )
     logger.info("Liquidations: %d", liquidations)
     logger.info("Average return: %.2f%%", avg_return)
     logger.info("Average drawdown: %.2f%%", avg_drawdown)
     logger.info("Fitness: %.2f", best_fitness)
     logger.info("Total trades: %d", total_trades)
+
+    # Re-run backtest with signal capture for debugging
+    logger.info("Capturing detailed signals...")
+    detailed_window_results: list[WindowResultModel] = []
+
+    for window, basic_result in zip(window_data, best_results):
+        # Run backtest with signal capture
+        _, signals = _run_backtest_with_signals(
+            individual=best_individual,
+            ohlcv_data=window.ohlcv_data,
+            timestamps=window.timestamps,
+            funding_interval_candles=window.funding_interval_candles,
+            starting_margin=starting_margin,
+            commission_ratio=commission_ratio,
+            investment_ratio=investment_ratio,
+            leverage=leverage,
+            funding_enabled=funding_enabled,
+        )
+
+        # Create detailed window result
+        detailed_result = WindowResultModel(
+            window_num=basic_result.window_num,
+            start_date=window.test_start.strftime("%Y-%m-%d"),
+            end_date=window.test_end.strftime("%Y-%m-%d"),
+            return_pct=basic_result.return_pct,
+            max_drawdown_pct=basic_result.max_drawdown_pct,
+            trades=basic_result.trades,
+            liquidated=basic_result.liquidated,
+            signals=signals,
+        )
+        detailed_window_results.append(detailed_result)
+
+    logger.info(
+        "Captured %d signals across %d windows",
+        sum(len(w.signals) for w in detailed_window_results),
+        len(detailed_window_results),
+    )
 
     # Save strategy
     logger.info("[4/4] Saving strategy...")
@@ -669,6 +971,7 @@ def train(
         total_trades=total_trades,
         final_equity=float(starting_margin) * (1 + avg_return / 100),
         peak_equity=float(starting_margin),
+        windows=detailed_window_results,
     )
 
     strategy_path = strategy.save(strategies_dir)

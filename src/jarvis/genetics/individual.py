@@ -36,6 +36,19 @@ class Individual:
     SHORT_THRESHOLD = -1.0
     CLOSE_THRESHOLD = 0.5
 
+    def get_total_score(self, ohlcv: OHLCV) -> float:
+        """Calculate total score from all rules.
+
+        Args:
+            ohlcv: OHLCV named tuple with numpy arrays
+
+        Returns:
+            Sum of all rule contributions (positive = bullish, negative = bearish)
+        """
+        if not self.rules:
+            return 0.0
+        return sum(rule.calculate_contribution(ohlcv) for rule in self.rules)
+
     def get_signal(self, ohlcv: OHLCV, current_side: PositionSide = PositionSide.NONE) -> ActionType:
         """Calculate trading signal from rules with position awareness.
 
@@ -49,7 +62,7 @@ class Individual:
         if not self.rules:
             return ActionType.STAY
 
-        total = sum(rule.calculate_contribution(ohlcv) for rule in self.rules)
+        total = self.get_total_score(ohlcv)
 
 
         # No position - can open new

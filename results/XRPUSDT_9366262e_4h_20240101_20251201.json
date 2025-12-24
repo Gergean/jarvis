@@ -1,0 +1,14 @@
+{
+  "strategy_id": "XRPUSDT_9366262e",
+  "symbol": "XRPUSDT",
+  "interval": "4h",
+  "start_date": "2024-01-01",
+  "end_date": "2025-12-01",
+  "result_type": "walk_forward",
+  "return_pct": 4.872663445078358,
+  "max_drawdown_pct": 4.081219953638554,
+  "total_trades": 75,
+  "final_equity": 104.87266344507835,
+  "peak_equity": 100.0,
+  "created_at": "2025-12-23T18:36:41.977346"
+}

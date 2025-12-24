@@ -1,0 +1,14 @@
+{
+  "strategy_id": "BTCUSDT_1ca310a2",
+  "symbol": "BTCUSDT",
+  "interval": "1h",
+  "start_date": "2024-06-01",
+  "end_date": "2024-09-01",
+  "result_type": "walk_forward",
+  "return_pct": -0.4880657058688611,
+  "max_drawdown_pct": 2.0778801514787375,
+  "total_trades": 24,
+  "final_equity": 99.51193429413114,
+  "peak_equity": 99.51193429413114,
+  "created_at": "2025-12-23T13:54:59.476755"
+}

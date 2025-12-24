@@ -1,0 +1,14 @@
+{
+  "strategy_id": "ETHUSDT_c3b662fa",
+  "symbol": "ETHUSDT",
+  "interval": "1d",
+  "start_date": "2024-01-01",
+  "end_date": "2025-12-01",
+  "result_type": "walk_forward",
+  "return_pct": 3.82105539748708,
+  "max_drawdown_pct": 2.601898789730984,
+  "total_trades": 53,
+  "final_equity": 103.82105539748707,
+  "peak_equity": 100.0,
+  "created_at": "2025-12-23T14:51:03.947627"
+}

@@ -1,0 +1,92 @@
+{
+  "id": "SOLUSDT_a6acbd2e",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-24T11:14:31.657642",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-24",
+    "end_date": "2025-12-24",
+    "generations": 100,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 113.34909761561384,
+        "weight": -596855.6391900152
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 127.47929214772446,
+        "weight": -395541.2244323777
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 74
+          }
+        },
+        "target": 120.3143235814088,
+        "weight": 892025.2979148112
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 10,
+            "slow": 22,
+            "signal": 11
+          }
+        },
+        "target": 120.81016186703283,
+        "weight": 187346.41226466116
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 88
+          }
+        },
+        "target": 101.54634973632302,
+        "weight": 381235.57217115443
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 134.25827224134235,
+        "weight": -755868.6247388565
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 12,
+            "slow": 39,
+            "signal": 6
+          }
+        },
+        "target": 0.5030687741344575,
+        "weight": -779534.2111142365
+      }
+    ],
+    "fitness": 16.493493527395195
+  }
+}

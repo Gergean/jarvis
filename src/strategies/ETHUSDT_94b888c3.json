@@ -1,0 +1,92 @@
+{
+  "id": "ETHUSDT_94b888c3",
+  "symbol": "ETHUSDT",
+  "created_at": "2025-12-24T10:31:10.320543",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-24",
+    "end_date": "2025-12-24",
+    "generations": 100,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 10
+          }
+        },
+        "target": 3242.376025466016,
+        "weight": -201465.26751486957
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 125
+          }
+        },
+        "target": 2715.8930503793367,
+        "weight": -390761.4647859027
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 17,
+            "slow": 31,
+            "signal": 13
+          }
+        },
+        "target": 52.697073713915714,
+        "weight": -965314.6441567057
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 2608.7469177374805,
+        "weight": 588312.0224357307
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 3294.195672818026,
+        "weight": 446338.42188423744
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 6,
+            "slow": 28,
+            "signal": 10
+          }
+        },
+        "target": -49.96013103733012,
+        "weight": 236625.49884065147
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 198
+          }
+        },
+        "target": 2523.254290742925,
+        "weight": -694683.9642716326
+      }
+    ],
+    "fitness": 4.552005628332076
+  }
+}

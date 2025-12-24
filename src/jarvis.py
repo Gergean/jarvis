@@ -4,6 +4,7 @@
 import argparse
 import doctest
 import os
+import webbrowser
 from datetime import datetime
 from decimal import Decimal  # Used by trade_parser
 from os.path import exists
@@ -17,6 +18,7 @@ from jarvis import (
     paper_list,
     paper_trade,
     pinescript,
+    plot,
     test,
     trade,
     trade_with_strategies,
@@ -53,6 +55,7 @@ def main() -> None:
     download_parser = subparsers.add_parser("download")
     paper_parser = subparsers.add_parser("paper")
     pinescript_parser = subparsers.add_parser("pinescript")
+    plot_parser = subparsers.add_parser("plot")
     test_parser = subparsers.add_parser("test")
     trade_parser = subparsers.add_parser("trade")
     trade_ga_parser = subparsers.add_parser("trade-ga")
@@ -140,6 +143,47 @@ def main() -> None:
         type=str,
         default=None,
         help="Output path for Pine Script file. Default: strategies/{strategy_id}.pine",
+    )
+
+    # Plot parser arguments
+    plot_parser.add_argument(
+        "-s",
+        dest="strategy_id",
+        metavar="STRATEGY_ID",
+        type=str,
+        required=True,
+        help="Strategy ID (e.g., BTCUSDT_abc123) or path to JSON file",
+    )
+
+    plot_parser.add_argument(
+        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval. Default: %(default)s"
+    )
+
+    plot_parser.add_argument(
+        "-st",
+        dest="start_dt",
+        default=None,
+        type=dt_type,
+        metavar="START_TIME",
+        help="Chart start date. Default: 3 months ago.",
+    )
+
+    plot_parser.add_argument(
+        "-et",
+        dest="end_dt",
+        default=None,
+        type=dt_type,
+        metavar="END_TIME",
+        help="Chart end date. Default: now.",
+    )
+
+    plot_parser.add_argument(
+        "-o",
+        dest="output_path",
+        metavar="OUTPUT_PATH",
+        type=str,
+        default=None,
+        help="Output HTML file path. Default: charts/{strategy_id}.html",
     )
 
     trade_parser.add_argument(
@@ -499,6 +543,17 @@ def main() -> None:
     elif kwargs.subparser == "pinescript":
         output_path = pinescript(kwargs.strategy_id, kwargs.output_path)
         print(f"Pine Script saved: {output_path}")
+
+    elif kwargs.subparser == "plot":
+        output_path = plot(
+            kwargs.strategy_id,
+            kwargs.interval,
+            kwargs.start_dt,
+            kwargs.end_dt,
+            kwargs.output_path,
+        )
+        print(f"Chart saved: {output_path}")
+        webbrowser.open(f"file://{os.path.abspath(output_path)}")
 
     elif kwargs.subparser == "paper":
         if kwargs.paper_command == "init":

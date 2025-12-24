@@ -41,6 +41,24 @@ class Rule:
             return 0.0
         return (value - self.target) * self.weight / self.WEIGHT_SCALE
 
+    def calculate_contribution_detailed(self, ohlcv: OHLCV) -> tuple[float, float, float]:
+        """Calculate contribution with detailed breakdown for debugging.
+
+        Args:
+            ohlcv: OHLCV named tuple with numpy arrays
+
+        Returns:
+            Tuple of (indicator_value, target, contribution)
+            If value is NaN, returns (NaN, target, 0.0)
+        """
+        import math
+
+        value = self.indicator.calculate(ohlcv)
+        if math.isnan(value):
+            return (float("nan"), self.target, 0.0)
+        contribution = (value - self.target) * self.weight / self.WEIGHT_SCALE
+        return (value, self.target, contribution)
+
     def mutate(self) -> "Rule":
         """Return a mutated copy of this rule.
 

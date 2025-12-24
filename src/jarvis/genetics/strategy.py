@@ -11,6 +11,102 @@ from jarvis.genetics.individual import Individual
 
 
 @dataclass
+class RuleContribution:
+    """Contribution of a single rule to a trading signal."""
+
+    rule_str: str  # Human-readable rule description
+    value: float  # Actual indicator value
+    target: float  # Rule target value
+    contribution: float  # (value - target) * weight / WEIGHT_SCALE
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "rule": self.rule_str,
+            "value": round(self.value, 6),
+            "target": round(self.target, 6),
+            "contribution": round(self.contribution, 4),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RuleContribution":
+        return cls(
+            rule_str=data["rule"],
+            value=data["value"],
+            target=data["target"],
+            contribution=data["contribution"],
+        )
+
+
+@dataclass
+class TradeSignal:
+    """A single trading signal with rule contributions for debugging."""
+
+    timestamp: str  # ISO format
+    action: str  # LONG, SHORT, CLOSE
+    price: float
+    score: float  # Total score before action
+    rule_contributions: list[RuleContribution]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timestamp": self.timestamp,
+            "action": self.action,
+            "price": round(self.price, 8),
+            "score": round(self.score, 4),
+            "rule_contributions": [r.to_dict() for r in self.rule_contributions],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TradeSignal":
+        return cls(
+            timestamp=data["timestamp"],
+            action=data["action"],
+            price=data["price"],
+            score=data["score"],
+            rule_contributions=[RuleContribution.from_dict(r) for r in data["rule_contributions"]],
+        )
+
+
+@dataclass
+class WindowResult:
+    """Result of testing a strategy on a single walk-forward window."""
+
+    window_num: int
+    start_date: str
+    end_date: str
+    return_pct: float
+    max_drawdown_pct: float
+    trades: int
+    liquidated: bool
+    signals: list[TradeSignal] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "window_num": self.window_num,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "return_pct": round(self.return_pct, 4),
+            "max_drawdown_pct": round(self.max_drawdown_pct, 4),
+            "trades": self.trades,
+            "liquidated": self.liquidated,
+            "signals": [s.to_dict() for s in self.signals],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "WindowResult":
+        return cls(
+            window_num=data["window_num"],
+            start_date=data["start_date"],
+            end_date=data["end_date"],
+            return_pct=data["return_pct"],
+            max_drawdown_pct=data["max_drawdown_pct"],
+            trades=data["trades"],
+            liquidated=data["liquidated"],
+            signals=[TradeSignal.from_dict(s) for s in data.get("signals", [])],
+        )
+
+
+@dataclass
 class TrainingConfig:
     """Configuration used during training."""
 
@@ -150,12 +246,13 @@ class TestResult:
     interval: str
     start_date: str
     end_date: str
-    result_type: str  # "training" or "test"
+    result_type: str  # "walk_forward", "training", or "test"
     return_pct: float
     max_drawdown_pct: float
     total_trades: int
     final_equity: float
     peak_equity: float
+    windows: list[WindowResult] = field(default_factory=list)  # Per-window results with signals
     created_at: datetime = field(default_factory=datetime.utcnow)
 
     def get_filename(self) -> str:
@@ -177,6 +274,7 @@ class TestResult:
             "total_trades": self.total_trades,
             "final_equity": self.final_equity,
             "peak_equity": self.peak_equity,
+            "windows": [w.to_dict() for w in self.windows],
             "created_at": self.created_at.isoformat(),
         }
 
@@ -194,6 +292,7 @@ class TestResult:
             total_trades=data["total_trades"],
             final_equity=data["final_equity"],
             peak_equity=data["peak_equity"],
+            windows=[WindowResult.from_dict(w) for w in data.get("windows", [])],
             created_at=datetime.fromisoformat(data["created_at"]),
         )
 

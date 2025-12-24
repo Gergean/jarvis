@@ -1,0 +1,14 @@
+{
+  "strategy_id": "DOGEUSDT_d77db325",
+  "symbol": "DOGEUSDT",
+  "interval": "1d",
+  "start_date": "2024-01-01",
+  "end_date": "2025-12-01",
+  "result_type": "walk_forward",
+  "return_pct": 4.280188848216383,
+  "max_drawdown_pct": 1.974780745867966,
+  "total_trades": 15,
+  "final_equity": 104.2801888482164,
+  "peak_equity": 100.0,
+  "created_at": "2025-12-23T18:01:27.290498"
+}

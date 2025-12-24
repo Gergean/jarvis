@@ -1,0 +1,14 @@
+{
+  "strategy_id": "SOLUSDT_917a4962",
+  "symbol": "SOLUSDT",
+  "interval": "1h",
+  "start_date": "2024-12-24",
+  "end_date": "2025-12-24",
+  "result_type": "walk_forward",
+  "return_pct": 3.5167386832183314,
+  "max_drawdown_pct": 4.996818851838409,
+  "total_trades": 383,
+  "final_equity": 103.51673868321834,
+  "peak_equity": 100.0,
+  "created_at": "2025-12-24T06:57:26.388222"
+}

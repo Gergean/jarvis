@@ -1,0 +1,14 @@
+{
+  "strategy_id": "TRXUSDT_becc56ae",
+  "symbol": "TRXUSDT",
+  "interval": "1d",
+  "start_date": "2024-01-01",
+  "end_date": "2025-12-01",
+  "result_type": "walk_forward",
+  "return_pct": -0.11268848359624048,
+  "max_drawdown_pct": 2.379505820823154,
+  "total_trades": 53,
+  "final_equity": 99.88731151640377,
+  "peak_equity": 99.88731151640377,
+  "created_at": "2025-12-23T14:31:37.543344"
+}

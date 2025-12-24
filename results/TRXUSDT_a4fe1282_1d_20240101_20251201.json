@@ -1,0 +1,14 @@
+{
+  "strategy_id": "TRXUSDT_a4fe1282",
+  "symbol": "TRXUSDT",
+  "interval": "1d",
+  "start_date": "2024-01-01",
+  "end_date": "2025-12-01",
+  "result_type": "walk_forward",
+  "return_pct": 2.0393437133638996,
+  "max_drawdown_pct": 1.3073780052059016,
+  "total_trades": 21,
+  "final_equity": 102.03934371336389,
+  "peak_equity": 100.0,
+  "created_at": "2025-12-23T17:19:48.350370"
+}
