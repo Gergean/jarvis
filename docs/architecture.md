@@ -9,7 +9,8 @@ Bu doküman, Jarvis projesinin nasıl çalıştığını, neden bu şekilde tasa
 3. [Jarvis'te GA Nasıl Kullanılıyor?](#jarviste-ga-nasıl-kullanılıyor)
 4. [Kod Yapısı](#kod-yapısı)
 5. [Futures Trading Mantığı](#futures-trading-mantığı)
-6. [Kullanım Örnekleri](#kullanım-örnekleri)
+6. [Paper Trading ve Elites Sistemi](#paper-trading-ve-elites-sistemi)
+7. [Kullanım Örnekleri](#kullanım-örnekleri)
 
 ---
 
@@ -328,30 +329,48 @@ Bu yöntem, iyi stratejilere daha fazla şans verir ama kötü olanlara da küç
 ### Dosya Haritası
 
 ```
-src/jarvis/
+jarvis/
 │
-├── commands/              # CLI komutları
-│   ├── train.py           # just train → GA eğitimi başlatır
-│   ├── test.py            # just test → Stratejiyi test eder
-│   ├── trade.py           # just trade → Canlı trading
-│   └── download.py        # just download → Veri indirir
+├── src/jarvis/            # Ana kaynak kodu
+│   ├── commands/          # CLI komutları
+│   │   ├── train.py       # GA eğitimi (walk-forward validation)
+│   │   ├── test.py        # Strateji testi
+│   │   ├── trade.py       # Canlı trading
+│   │   ├── paper.py       # Paper trading simülasyonu
+│   │   ├── download.py    # Veri indirme
+│   │   └── pinescript.py  # TradingView export
+│   │
+│   ├── genetics/          # Genetik algoritma çekirdeği
+│   │   ├── individual.py  # Individual sınıfı (strateji)
+│   │   ├── population.py  # Population sınıfı (evrim motoru)
+│   │   ├── rule.py        # Rule sınıfı (tek kural)
+│   │   ├── indicators.py  # RSI, SMA, MACD hesaplamaları
+│   │   ├── strategy.py    # Strateji kaydetme/yükleme
+│   │   └── portfolio.py   # Çoklu coin yönetimi
+│   │
+│   ├── signals/           # [DEPRECATED] Eski sinyal üreticileri
+│   ├── actions/           # [DEPRECATED] Eski action üreticileri
+│   │
+│   ├── client.py          # Binance API + FakeClient
+│   ├── models.py          # ActionType, PositionSide, vs.
+│   ├── settings.py        # Ayarlar (.env dosyasından)
+│   ├── utils.py           # Yardımcı fonksiyonlar
+│   └── logging.py         # Log ayarları (console only)
 │
-├── genetics/              # Genetik algoritma çekirdeği
-│   ├── individual.py      # Individual sınıfı (strateji)
-│   ├── population.py      # Population sınıfı (evrim motoru)
-│   ├── rule.py            # Rule sınıfı (tek kural)
-│   ├── indicators.py      # RSI, SMA, MACD hesaplamaları
-│   ├── strategy.py        # Strateji kaydetme/yükleme
-│   └── portfolio.py       # Çoklu coin yönetimi
+├── data/binance/          # Tarihsel veriler
+│   └── {SYMBOL}/{interval}/YYYYMMDD.csv
 │
-├── signals/               # [DEPRECATED] Eski sinyal üreticileri
-├── actions/               # [DEPRECATED] Eski action üreticileri
+├── strategies/            # Stratejiler
+│   ├── *.json             # Eğitilmiş stratejiler
+│   ├── *.pine             # TradingView Pine Script
+│   └── elites/            # Günlük evrimleşen elite'ler
+│       └── {SYMBOL}/{interval}/YYYYMMDD_HHMMSS.json
 │
-├── client.py              # Binance API + FakeClient (backtest için)
-├── models.py              # ActionType, PositionSide, vs.
-├── settings.py            # Ayarlar (.env dosyasından)
-├── utils.py               # Yardımcı fonksiyonlar
-└── logging.py             # Log ayarları
+├── paper/                 # Paper trading wallet'ları
+│   └── {wallet_id}.json
+│
+└── results/               # Test sonuçları
+    └── {strategy_id}_{interval}_{dates}.json
 ```
 
 ### Veri Akışı
@@ -486,28 +505,109 @@ Bu backtest'te simüle edilir, gerçekçi sonuçlar için önemlidir.
 
 ---
 
+## Paper Trading ve Elites Sistemi
+
+### Paper Trading Nedir?
+
+Paper trading, gerçek para kullanmadan simülasyon ortamında trade yapmaktır. Stratejiyi canlıya almadan önce test etmek için kullanılır.
+
+```bash
+# Wallet oluştur (seed strateji gerekli)
+uv run python src/jarvis.py paper init test1 -b 1000 -c ETHUSDT:1h -s ETHUSDT_abc123
+
+# Belirli tarihe kadar trade simüle et
+uv run python src/jarvis.py paper trade test1 -et 2025-10-15T00:00:00
+
+# Wallet durumunu gör
+uv run python src/jarvis.py paper info test1
+```
+
+### Elites Sistemi
+
+Paper trading sırasında "time travel" problemini önlemek için elites sistemi kullanılır.
+
+**Problem:** 70. günde paper trade yaparken, 100. günde (bugün) eğitilmiş stratejiyi kullanırsak, geleceği bilmiş oluruz. Bu gerçekçi değil.
+
+**Çözüm:** Her gün 00:00 UTC'de yeni bir "elite" strateji evrimleştirilir ve kaydedilir:
+
+```
+strategies/elites/
+└── ETHUSDT/
+    └── 1h/
+        ├── 20251001_000000.json  # 1 Ekim'de evrimleşen
+        ├── 20251002_000000.json  # 2 Ekim'de evrimleşen
+        ├── 20251003_000000.json  # 3 Ekim'de evrimleşen
+        └── ...
+```
+
+Paper trade şöyle çalışır:
+1. Simülasyon tarihi 00:00 UTC ise → Yeni elite evolve et ve kaydet
+2. Değilse → O tarihte mevcut olan en son elite'i kullan
+3. Elite yoksa → Seed stratejiyi kullan
+
+Bu sayede:
+- Her gün farklı bir strateji kullanılır
+- Gelecek bilgisi kullanılmaz
+- Gerçek canlı trading ile aynı koşullar simüle edilir
+
+### Seed Strateji
+
+Paper trading başlatırken bir "seed" strateji gereklidir. Bu, evrim zincirinin başlangıç noktasıdır:
+
+```bash
+# ETHUSDT_abc123 stratejisi seed olarak kullanılır
+uv run python src/jarvis.py paper init mywallet -b 1000 -c ETHUSDT:1h -s ETHUSDT_abc123
+```
+
+Evrim süreci:
+```
+Seed (ETHUSDT_abc123)
+    ↓ evolve (30 gün veri, 10 generation)
+Elite Day 1
+    ↓ evolve
+Elite Day 2
+    ↓ evolve
+Elite Day 3
+    ...
+```
+
+Her elite, bir öncekinden evrimleşir. Bu sayede strateji piyasa koşullarına adapte olur.
+
+---
+
 ## Kullanım Örnekleri
 
 ### Temel Komutlar
 
 ```bash
 # Veri indir (son 1 yıl)
-just download -s BTCUSDT ETHUSDT -i 1h
+uv run python src/jarvis.py download -s BTCUSDT ETHUSDT -i 1h
 
-# Strateji eğit (varsayılan: 6 ay, 1x leverage)
-just train -s BTCUSDT -i 1h
+# Strateji eğit (walk-forward validation varsayılan)
+uv run python src/jarvis.py train -s BTCUSDT -i 1h
 
 # 5x kaldıraçla eğit
-just train -s BTCUSDT -i 1h -l 5
+uv run python src/jarvis.py train -s BTCUSDT -i 1h -l 5
 
-# Özel tarih aralığında eğit
-just train -s BTCUSDT -i 1h -st 2024-01-01T00:00:00 -et 2024-06-01T00:00:00
+# Özel walk-forward periyotlarıyla eğit
+uv run python src/jarvis.py train -s BTCUSDT -i 1h --train-period 90d --test-period 2w --step-period 1w
 
-# Stratejiyi test et (son 3 ay, eğitim dönemi dışı)
-just test -s BTCUSDT_abc123 -i 1h
+# Walk-forward olmadan eğit (önerilmez)
+uv run python src/jarvis.py train -s BTCUSDT -i 1h --no-walk-forward
+
+# Stratejiyi test et
+uv run python src/jarvis.py test -s BTCUSDT_abc123 -i 1h
 
 # Simülasyon modunda trade
-just trade -s BTCUSDT_abc123 --dry-run
+uv run python src/jarvis.py trade-ga -s BTCUSDT_abc123 --dry-run
+
+# Paper trading
+uv run python src/jarvis.py paper init test1 -b 1000 -c BTCUSDT:1h -s BTCUSDT_abc123
+uv run python src/jarvis.py paper trade test1 -et 2025-10-15T00:00:00
+uv run python src/jarvis.py paper info test1
+
+# Pine Script export
+uv run python src/jarvis.py pinescript -s BTCUSDT_abc123
 ```
 
 ### Eğitim Çıktısı Nasıl Okunur?
