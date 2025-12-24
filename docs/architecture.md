@@ -7,6 +7,7 @@ Bu doküman, Jarvis projesinin nasıl çalıştığını, neden bu şekilde tasa
 1. [Proje Geçmişi](#proje-geçmişi)
 2. [Genetik Algoritma Nedir?](#genetik-algoritma-nedir)
 3. [Jarvis'te GA Nasıl Kullanılıyor?](#jarviste-ga-nasıl-kullanılıyor)
+   - [Fitness Fonksiyonu Detayları](#fitness-fonksiyonu-detayları)
 4. [Kod Yapısı](#kod-yapısı)
 5. [Futures Trading Mantığı](#futures-trading-mantığı)
 6. [Paper Trading ve Elites Sistemi](#paper-trading-ve-elites-sistemi)
