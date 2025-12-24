@@ -59,7 +59,7 @@ Genetik Algoritma (GA), doğadaki evrim sürecini taklit eden bir optimizasyon t
 | Birey (Organizma) | Individual | Bir trading stratejisi |
 | Gen | Parametre | RSI periyodu, SMA değeri, ağırlık |
 | Kromozom | Rule seti | Stratejideki tüm kurallar |
-| Popülasyon | Population | 100 farklı strateji |
+| Popülasyon | Population | 50 farklı strateji |
 | Uygunluk (Fitness) | Fitness score | Stratejinin getirisi |
 | Doğal seçilim | Selection | En karlı stratejileri seç |
 | Çaprazlama | Crossover | İki stratejiyi birleştir |
@@ -79,7 +79,7 @@ GA da aynı mantıkla çalışır:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  BAŞLANGIÇ: 100 rastgele strateji oluştur                   │
+│  BAŞLANGIÇ: 50 rastgele strateji oluştur                    │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -93,7 +93,7 @@ GA da aynı mantıkla çalışır:
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  SEÇ: En iyi 10 stratejiyi koru (elitism)                   │
+│  SEÇ: En iyi %10'u koru (elitism)                           │
 │                                                             │
 │  Strateji A ✓ (elit)                                        │
 │  Strateji B ✓ (elit)                                        │
@@ -119,7 +119,7 @@ GA da aynı mantıkla çalışır:
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  YENİ NESİL: 100 strateji (10 elit + 10 rastgele + 80 çocuk)│
+│  YENİ NESİL: 50 strateji (%10 elit + %10 rastgele + çocuklar)│
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -147,7 +147,7 @@ Tüm kombinasyonları denemek → 45 × 60 × 190 × ... = **milyonlarca** olas�
 
 ```
 Brute Force: ████████████████████████████████ 1,000,000 deneme
-GA:          ████ 3,000 deneme (100 birey × 30 nesil)
+GA:          ████ 1,500 deneme (50 birey × 30 nesil)
 
 Sonuç: GA, %0.3 çabayla %90+ performansa ulaşabilir
 ```
@@ -177,80 +177,79 @@ BTCUSDT Stratejisi (fitness: +12.5):
 
 ### Rule (Kural) = Tek Bir Koşul
 
-Her kural şunu söyler: "Eğer X göstergesi Y değerinden büyükse, toplama W puan ekle/çıkar."
+Her kural, bir göstergenin değerini hedefle karşılaştırarak katkı hesaplar.
 
 ```python
 class Rule:
     indicator: Indicator  # RSI, SMA, MACD, vs.
-    target: float         # Karşılaştırma değeri (örn: 70)
-    weight: float         # -1.0 ile +1.0 arası
+    target: float         # Hedef değer (örn: 70)
+    weight: float         # Ağırlık (±1,000,000 arası)
 ```
 
 **Kural nasıl çalışır?**
 
-```python
-def evaluate(self, ohlcv):
-    # Göstergeyi hesapla
-    value = self.indicator.calculate(ohlcv)  # örn: RSI = 75
-
-    # Karşılaştır
-    if value > self.target:  # 75 > 70? Evet!
-        return self.weight   # +0.8 döndür
-    return 0.0               # Koşul sağlanmadı
 ```
+katkı = (gösterge_değeri - hedef) * ağırlık / 100,000
+```
+
+Örnek:
+```
+RSI = 75, hedef = 70, ağırlık = +500,000
+
+katkı = (75 - 70) * 500,000 / 100,000
+      = 5 * 5
+      = +25 (güçlü pozitif katkı)
+```
+
+Hedeften uzaklık ve ağırlık birlikte sinyalin gücünü belirler.
 
 ### Sinyal Nasıl Üretilir?
 
-Tüm kuralların puanları toplanır ve eşik değerlere göre karar verilir:
-
-```python
-def get_signal(self, ohlcv, current_position):
-    # Tüm kuralları değerlendir
-    total = 0
-    for rule in self.rules:
-        total += rule.evaluate(ohlcv)
-
-    # Örnek: total = 0.8 + (-0.5) + 0.3 + 0.2 = 0.8
-
-    # Karar ver
-    if pozisyon_yok:
-        if total > 1.0:   return LONG   # Güçlü alım sinyali
-        if total < -1.0:  return SHORT  # Güçlü satım sinyali
-
-    if long_pozisyondayız:
-        if total < -0.5:  return CLOSE  # Trend dönüyor, kapat
-
-    if short_pozisyondayız:
-        if total > 0.5:   return CLOSE  # Trend dönüyor, kapat
-
-    return STAY  # Bekle, bir şey yapma
-```
-
-**Görsel örnek:**
+Tüm kuralların katkıları toplanır ve eşik değerlere göre karar verilir:
 
 ```
-Kural 1: RSI(14) > 70?     → 75 > 70 ✓  → +0.8
-Kural 2: SMA(50) > 95000?  → 92000 > 95000 ✗  → 0
-Kural 3: MACD_HIST > 0?    → 150 > 0 ✓  → +0.3
-Kural 4: Volume > 1B?      → 1.2B > 1B ✓  → +0.2
-                                          ─────
-                               Toplam:    +1.3
+toplam = Σ (gösterge_değeri - hedef) * ağırlık / 100,000
+```
 
-1.3 > 1.0 → LONG aç!
+Karar mantığı:
+```
+Pozisyon yok iken:
+  toplam > +1.0  → LONG aç
+  toplam < -1.0  → SHORT aç
+
+Long pozisyondayken:
+  toplam < -0.5  → CLOSE (trend dönüyor)
+
+Short pozisyondayken:
+  toplam > +0.5  → CLOSE (trend dönüyor)
+
+Aksi halde → STAY (bekle)
+```
+
+**Örnek hesaplama:**
+
+```
+Kural 1: RSI(14)=75, hedef=70, ağırlık=+100,000 → (75-70)*100,000/100,000 = +5.0
+Kural 2: SMA(50)=92000, hedef=95000, ağırlık=+50,000 → (92000-95000)*50,000/100,000 = -1.5
+Kural 3: MACD_HIST=150, hedef=0, ağırlık=+20,000 → (150-0)*20,000/100,000 = +30.0
+                                                                            ─────
+                                                                 Toplam:   +33.5
+
+33.5 > 1.0 → LONG aç!
 ```
 
 ### Population (Popülasyon) = Strateji Havuzu
 
-100 farklı strateji aynı anda yarışır:
+50 farklı strateji aynı anda yarışır (varsayılan):
 
 ```python
 class Population:
-    individuals: list[Individual]  # 100 strateji
+    individuals: list[Individual]  # 50 strateji
     generation: int = 0            # Şu anki nesil
 
     # Ayarlar
-    population_size: int = 100     # Kaç birey?
-    elitism_ratio: float = 0.1     # En iyi %10'u koru
+    population_size: int = 50      # Kaç birey?
+    elitism_ratio: float = 0.1     # En iyi %10'u koru (5 birey)
     mutation_rate: float = 0.1     # %10 mutasyon şansı
 ```
 
