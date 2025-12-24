@@ -79,12 +79,18 @@ def test(
         extra_params={"assets": {"USDT": starting_margin}, "commission_ratio": commission_ratio},
     )
 
-    # Load all klines at once
+    # Load all klines at once, including lookback period for indicator warmup
     lookback = 200
+
+    # Calculate lookback start time based on interval
+    interval_hours = {"1m": 1/60, "5m": 5/60, "15m": 0.25, "30m": 0.5, "1h": 1, "4h": 4, "1d": 24}.get(interval, 1)
+    lookback_hours = int(lookback * interval_hours)
+    lookback_start = start_dt - relativedelta(hours=lookback_hours)
+
     all_klines = client.get_klines(
         symbol=symbol,
         interval=interval,
-        startTime=datetime_to_timestamp(start_dt),
+        startTime=datetime_to_timestamp(lookback_start),
         endTime=datetime_to_timestamp(end_dt),
         limit=50000,
     )
