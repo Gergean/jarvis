@@ -403,14 +403,16 @@ jarvis/
 │   │   ├── trade.py       # Canlı trading
 │   │   ├── paper.py       # Paper trading simülasyonu
 │   │   ├── download.py    # Veri indirme
-│   │   └── pinescript.py  # TradingView export
+│   │   ├── pinescript.py  # TradingView export
+│   │   └── portfolio.py   # Çoklu coin portfolio eğitim/test
 │   │
 │   ├── genetics/          # Genetik algoritma çekirdeği
-│   │   ├── individual.py  # Individual sınıfı (strateji)
+│   │   ├── individual.py  # Individual sınıfı (tek coin strateji)
 │   │   ├── population.py  # Population sınıfı (evrim motoru)
 │   │   ├── rule.py        # Rule sınıfı (tek kural)
 │   │   ├── indicators.py  # RSI, SMA, MACD hesaplamaları
-│   │   └── strategy.py    # Strateji kaydetme/yükleme
+│   │   ├── strategy.py    # Strateji kaydetme/yükleme
+│   │   └── portfolio.py   # Çoklu coin portfolio sistemi
 │   │
 │   ├── client.py          # Binance API + FakeClient
 │   ├── models.py          # ActionType, PositionSide, vs.
@@ -633,6 +635,104 @@ Elite Day 3
 ```
 
 Her elite, bir öncekinden evrimleşir. Bu sayede strateji piyasa koşullarına adapte olur.
+
+---
+
+## Portfolio (Çoklu Coin Stratejisi)
+
+### Neden Portfolio?
+
+Tek bir coin'e tüm sermayeyi yatırmak risklidir. Portfolio sistemi, birden fazla coin'i aynı anda yönetir:
+
+```
+Tek Coin Stratejisi:
+└── BTCUSDT (%100 sermaye) → BTC düşerse tüm sermaye risk altında
+
+Portfolio Stratejisi:
+├── BTCUSDT (%20)
+├── ETHUSDT (%20)
+├── SOLUSDT (%20)
+├── LINKUSDT (%20)
+└── Nakit (%20) → Diversifikasyon ile risk dağıtılır
+```
+
+### PortfolioIndividual
+
+Tek bir Individual yerine, her coin için ayrı strateji içeren PortfolioIndividual kullanılır:
+
+```python
+class PortfolioIndividual:
+    coin_strategies: dict[str, Individual]  # Her coin için ayrı strateji
+    max_allocation_per_coin: float = 0.20   # Coin başına maks %20
+    stop_loss_pct: float = 20.0             # Portfolio %20 düşerse hepsini kapat
+    fitness: float = 0.0                     # Portfolio seviyesinde fitness
+```
+
+### Portfolio Fitness
+
+Fitness, tek tek coin'lerin toplamı DEĞİL, toplam portfolio performansı üzerinden hesaplanır:
+
+```
+Portfolio Fitness = Toplam Getiri (%) - Maksimum Drawdown (%)
+
+Örnek:
+├── BTCUSDT: +15% getiri
+├── ETHUSDT: -5% getiri
+├── SOLUSDT: +10% getiri
+└── Portfolio: +20% getiri, %12 max drawdown
+    → Fitness = 20 - 12 = 8
+```
+
+Bu formül:
+- Yüksek getiriyi ödüllendirir
+- Yüksek drawdown'ı cezalandırır
+- Tutarlı performansı teşvik eder
+
+### Portfolio Stop-Loss
+
+Portfolio seviyesinde stop-loss mekanizması vardır:
+
+```
+Başlangıç: $1000
+Peak:      $1200 (en yüksek nokta)
+Şu an:     $960  (%20 drawdown)
+
+→ Tüm pozisyonlar kapatılır
+→ 24 mum cooldown (yeni pozisyon açılmaz)
+→ Cooldown bitince peak sıfırlanır
+```
+
+### Kullanım
+
+```bash
+# Portfolio eğit (3 coin, 30 nesil, her coin için %20 maks)
+uv run python src/jarvis.py portfolio train BTCUSDT ETHUSDT SOLUSDT -g 30 -p 50 --allocation 20 --stop-loss 20
+
+# Portfolio backtest
+uv run python src/jarvis.py portfolio test strategies/PORTFOLIO_abc123.json
+```
+
+### Dosya Haritası (Portfolio)
+
+```
+strategies/
+├── BTCUSDT_abc123.json      # Tek coin stratejisi
+├── PORTFOLIO_5a86c209.json  # Portfolio stratejisi
+│   {
+│     "id": "PORTFOLIO_5a86c209",
+│     "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+│     "portfolio": {
+│       "coin_strategies": {
+│         "BTCUSDT": { "rules": [...] },
+│         "ETHUSDT": { "rules": [...] },
+│         "SOLUSDT": { "rules": [...] }
+│       },
+│       "max_allocation_per_coin": 0.2,
+│       "stop_loss_pct": 20.0,
+│       "fitness": 12.75
+│     }
+│   }
+```
 
 ---
 

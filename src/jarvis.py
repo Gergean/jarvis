@@ -24,6 +24,7 @@ from jarvis import (
     train,
 )
 from jarvis.commands.train import FitnessType
+from jarvis.commands.portfolio import train_portfolio, test_portfolio
 from jarvis.logging import logger
 from jarvis.settings import get_settings, settings
 
@@ -57,6 +58,7 @@ def main() -> None:
     paper_parser = subparsers.add_parser("paper")
     pinescript_parser = subparsers.add_parser("pinescript")
     plot_parser = subparsers.add_parser("plot")
+    portfolio_parser = subparsers.add_parser("portfolio")
     status_parser = subparsers.add_parser("status")
     test_parser = subparsers.add_parser("test")
     trade_parser = subparsers.add_parser("trade")
@@ -64,6 +66,74 @@ def main() -> None:
 
     def dt_type(s: str) -> datetime:
         return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S")
+
+    # Portfolio parser arguments
+    portfolio_subparsers = portfolio_parser.add_subparsers(dest="portfolio_command")
+
+    portfolio_train_parser = portfolio_subparsers.add_parser("train", help="Train a multi-coin portfolio strategy")
+    portfolio_train_parser.add_argument(
+        "symbols",
+        nargs="+",
+        metavar="SYMBOL",
+        type=str,
+        help="Trading pairs (e.g., BTCUSDT ETHUSDT SOLUSDT)",
+    )
+    portfolio_train_parser.add_argument(
+        "-i", "--interval", dest="interval", default="4h", type=str,
+        help="Interval. Default: %(default)s",
+    )
+    portfolio_train_parser.add_argument(
+        "--start", dest="start_dt", default=None, type=dt_type,
+        help="Start date (YYYY-MM-DDTHH:MM:SS). Default: 6 months ago.",
+    )
+    portfolio_train_parser.add_argument(
+        "--end", dest="end_dt", default=None, type=dt_type,
+        help="End date (YYYY-MM-DDTHH:MM:SS). Default: now.",
+    )
+    portfolio_train_parser.add_argument(
+        "-p", "--population", dest="population_size", default=50, type=int,
+        help="Population size. Default: %(default)s",
+    )
+    portfolio_train_parser.add_argument(
+        "-g", "--generations", dest="generations", default=30, type=int,
+        help="Generations. Default: %(default)s",
+    )
+    portfolio_train_parser.add_argument(
+        "-r", "--rules", dest="rules_per_coin", default=5, type=int,
+        help="Rules per coin. Default: %(default)s",
+    )
+    portfolio_train_parser.add_argument(
+        "--allocation", dest="max_allocation", default=20, type=float,
+        help="Max allocation per coin (percent). Default: %(default)s",
+    )
+    portfolio_train_parser.add_argument(
+        "--stop-loss", dest="stop_loss", default=20, type=float,
+        help="Portfolio stop-loss (percent). Default: %(default)s",
+    )
+    portfolio_train_parser.add_argument(
+        "--seed", dest="seed_path", default=None, type=str,
+        help="Path to seed portfolio strategy JSON file.",
+    )
+
+    portfolio_test_parser = portfolio_subparsers.add_parser("test", help="Test a portfolio strategy")
+    portfolio_test_parser.add_argument(
+        "strategy_path",
+        metavar="STRATEGY",
+        type=str,
+        help="Path to portfolio strategy JSON file",
+    )
+    portfolio_test_parser.add_argument(
+        "--start", dest="start_dt", default=None, type=dt_type,
+        help="Start date. Default: 6 months ago.",
+    )
+    portfolio_test_parser.add_argument(
+        "--end", dest="end_dt", default=None, type=dt_type,
+        help="End date. Default: now.",
+    )
+    portfolio_test_parser.add_argument(
+        "-b", "--balance", dest="balance", default=1000, type=float,
+        help="Starting balance. Default: %(default)s",
+    )
 
     doctest_parser.add_argument(
         "-v", dest="verbose", default=False, action="store_true", help="Gives verbose output when set."
@@ -516,6 +586,35 @@ def main() -> None:
                     print(f"  - {w}")
             else:
                 print("No paper wallets found")
+
+    elif kwargs.subparser == "portfolio":
+        if kwargs.portfolio_command == "train":
+            strategy = train_portfolio(
+                symbols=kwargs.symbols,
+                interval=kwargs.interval,
+                start_dt=kwargs.start_dt,
+                end_dt=kwargs.end_dt,
+                population_size=kwargs.population_size,
+                generations=kwargs.generations,
+                rules_per_coin=kwargs.rules_per_coin,
+                max_allocation=kwargs.max_allocation / 100,
+                stop_loss=kwargs.stop_loss,
+                seed_path=kwargs.seed_path,
+            )
+            print(f"Portfolio Strategy: {strategy.id}")
+            print(f"Symbols: {', '.join(strategy.symbols)}")
+            print(f"Fitness: {strategy.portfolio.fitness:.2f}")
+
+        elif kwargs.portfolio_command == "test":
+            results = test_portfolio(
+                strategy_path=kwargs.strategy_path,
+                start_dt=kwargs.start_dt,
+                end_dt=kwargs.end_dt,
+                starting_balance=kwargs.balance,
+            )
+            print(f"Strategy: {results['strategy_id']}")
+            print(f"Return: {results['total_return_pct']:.2f}%")
+            print(f"Max Drawdown: {results['max_drawdown_pct']:.2f}%")
 
 
 if __name__ == "__main__":

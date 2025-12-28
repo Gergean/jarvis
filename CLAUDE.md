@@ -53,6 +53,12 @@ uv run python src/jarvis.py paper info test1
 
 # Pine Script export
 uv run python src/jarvis.py pinescript -s BTCUSDT_abc123
+
+# Portfolio training (multi-coin strategy)
+uv run python src/jarvis.py portfolio train BTCUSDT ETHUSDT SOLUSDT -g 30 -p 50 --allocation 20 --stop-loss 20
+
+# Portfolio backtest
+uv run python src/jarvis.py portfolio test strategies/PORTFOLIO_abc123.json
 ```
 
 ## Architecture
@@ -62,10 +68,13 @@ uv run python src/jarvis.py pinescript -s BTCUSDT_abc123
 Modular Python package containing:
 
 **Genetics System** (`genetics/`):
-- `Individual` - Trading strategy with weighted rules
+- `Individual` - Trading strategy with weighted rules (single coin)
 - `Population` - Collection of individuals that evolve
 - `Rule` - Single indicator condition with weight
 - `Strategy` - Saved individual with metadata
+- `PortfolioIndividual` - Multi-coin strategy with per-coin rules
+- `PortfolioPopulation` - Collection of portfolios that evolve together
+- `PortfolioStrategy` - Saved portfolio with metadata
 
 **Commands** (`commands/`):
 - `train` - Train GA strategies with walk-forward validation (default)
@@ -74,6 +83,7 @@ Modular Python package containing:
 - `paper` - Paper trading simulation with elites system
 - `download` - Fetch historical klines
 - `pinescript` - Export strategy to TradingView Pine Script
+- `portfolio` - Multi-coin portfolio training and backtesting
 
 **Walk-Forward Validation**:
 Train uses rolling windows by default to prevent overfitting:
@@ -262,6 +272,19 @@ MAX_LEVERAGE = 10
 - `Strategy` - Saved individual with ID, symbol, training config
 - `TestResult` - Backtest/test results (return%, drawdown, trades)
 
+**`portfolio.py` - Multi-Coin Portfolio:**
+- `PortfolioIndividual` - Contains strategies for multiple coins
+  - `coin_strategies: dict[str, Individual]` - Per-coin strategies
+  - `max_allocation_per_coin: float` - Max allocation per coin (default 20%)
+  - `stop_loss_pct: float` - Portfolio-wide stop-loss (default 20%)
+  - Fitness: `total_return_pct - max_drawdown_pct`
+- `PortfolioPopulation` - Evolution of portfolio strategies
+  - Evaluates all coins simultaneously
+  - Uses portfolio-level fitness (not sum of individual fitnesses)
+- `PortfolioStrategy` - Saved portfolio with training config
+- `Position` - Open position dataclass with P&L helpers
+- Constants: `LOOKBACK_PERIOD=200`, `COOLDOWN_CANDLES=24`, `MIN_POSITION_SIZE=10.0`
+
 ### `jarvis/commands/` - CLI Commands
 
 - `train.py` - GA training with walk-forward validation
@@ -272,3 +295,6 @@ MAX_LEVERAGE = 10
 - `paper.py` - Paper trading simulation (paper_init, paper_trade, paper_info, paper_list)
 - `download.py` - Fetch historical klines from Binance
 - `pinescript.py` - Export strategy to TradingView Pine Script
+- `portfolio.py` - Multi-coin portfolio training and backtesting
+  - `train_portfolio()` - Train portfolio with GA, returns PortfolioStrategy
+  - `test_portfolio()` - Backtest portfolio, returns detailed results
