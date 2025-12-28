@@ -41,6 +41,8 @@ from jarvis.utils import (
     interval_to_timedelta,
     ratio_as_str,
     timestamp_to_datetime,
+    validate_interval,
+    validate_symbol,
 )
 
 T = TypeVar("T")
@@ -53,7 +55,13 @@ def get_day_file_path(symbol: str, interval: str, day: datetime) -> str:
     """
     >>> get_day_file_path('BTCUSDT', '1h', datetime(2020, 1, 1)).endswith('data/binance/BTCUSDT/1h/20200101.csv')
     True
+    >>> get_day_file_path('../etc', '1h', datetime(2020, 1, 1))
+    Traceback (most recent call last):
+    ...
+    ValueError: Invalid symbol format: ../etc
     """
+    validate_symbol(symbol)
+    validate_interval(interval)
     file_name = day.strftime("%Y%m%d.csv")
     return str(PROJECT_ROOT / "data" / "binance" / symbol / interval / file_name)
 
@@ -61,11 +69,12 @@ def get_day_file_path(symbol: str, interval: str, day: datetime) -> str:
 def create_day_file(client: Client | None, symbol: str, interval: str, day: datetime) -> str:
     """Fetch klines from given symbol and interval and write to day file.
 
-    TODO: Doctests.
+    If client is None, creates an unauthenticated client to fetch public kline data.
+    Klines are public endpoints and don't require API keys.
     """
     if client is None:
-        file_path = get_day_file_path(symbol, interval, day)
-        raise FileNotFoundError(f"CSV file not found and no client available to fetch data: {file_path}")
+        # Create unauthenticated client for public kline data (no API key needed)
+        client = Client()
 
     interval_delta = interval_to_timedelta(interval)
     file_path = get_day_file_path(symbol, interval, day)
@@ -121,7 +130,7 @@ def create_day_file(client: Client | None, symbol: str, interval: str, day: date
     return file_path
 
 
-@ring.lru()  # type: ignore[untyped-decorator]
+@ring.lru(maxsize=500)  # type: ignore[untyped-decorator]
 def load_day_file(symbol: str, interval: str, day: datetime, file_path: str | None = None) -> list[list[Any]]:
     """Load day file, make type conversions and return list of lists."""
     file_path = file_path or get_day_file_path(symbol, interval, day)
@@ -405,7 +414,7 @@ class CachedClient:
         """Needed by cache library to create cache key."""
         return "CachedClient"
 
-    @ring.lru()  # type: ignore[untyped-decorator]
+    @ring.lru(maxsize=500)  # type: ignore[untyped-decorator]
     def get_symbol_info(self, symbol: str) -> dict[str, Any]:
         """Get symbol info from real client or return defaults for offline mode.
 
@@ -434,7 +443,7 @@ class CachedClient:
             "quoteAsset": quote_asset,
         }
 
-    @ring.lru()  # type: ignore[untyped-decorator]
+    @ring.lru(maxsize=500)  # type: ignore[untyped-decorator]
     def get_exchange_info(self) -> dict[str, Any]:
         """Get exchange info from real client or return empty dict for offline mode."""
         if self.client:
@@ -757,3 +766,213 @@ def get_binance_client(fake: bool = False, extra_params: dict[str, Any] | None =
     # For live trading, create real client and wrap in CachedClient for kline caching
     client = Client(settings.binance_api_key, settings.binance_secret_key)
     return CachedClient(client, **extra_params or {})
+
+
+class FuturesClient:
+    """Binance Futures client for live trading.
+
+    Wraps the python-binance client with futures-specific methods.
+    """
+
+    def __init__(self, api_key: str, secret_key: str) -> None:
+        """Initialize futures client.
+
+        Args:
+            api_key: Binance API key
+            secret_key: Binance secret key
+        """
+        self.client = Client(api_key, secret_key)
+        logger.info("Futures client initialized")
+
+    def get_account(self) -> dict[str, Any]:
+        """Get futures account information.
+
+        Returns:
+            Account info including balance, positions, etc.
+        """
+        return self.client.futures_account()
+
+    def get_balance(self) -> Decimal:
+        """Get available USDT balance for futures trading.
+
+        Returns:
+            Available balance in USDT
+        """
+        account = self.get_account()
+        for asset in account.get("assets", []):
+            if asset["asset"] == "USDT":
+                return Decimal(asset["availableBalance"])
+        return Decimal("0")
+
+    def get_position(self, symbol: str) -> dict[str, Any] | None:
+        """Get current position for a symbol.
+
+        Args:
+            symbol: Trading pair (e.g., BTCUSDT)
+
+        Returns:
+            Position info or None if no position
+        """
+        positions = self.client.futures_position_information(symbol=symbol)
+        for pos in positions:
+            if pos["symbol"] == symbol and float(pos["positionAmt"]) != 0:
+                return pos
+        return None
+
+    def get_position_side(self, symbol: str) -> str:
+        """Get current position side for a symbol.
+
+        Args:
+            symbol: Trading pair
+
+        Returns:
+            'LONG', 'SHORT', or 'NONE'
+        """
+        pos = self.get_position(symbol)
+        if pos is None:
+            return "NONE"
+        amt = float(pos["positionAmt"])
+        if amt > 0:
+            return "LONG"
+        elif amt < 0:
+            return "SHORT"
+        return "NONE"
+
+    def set_leverage(self, symbol: str, leverage: int) -> dict[str, Any]:
+        """Set leverage for a symbol.
+
+        Args:
+            symbol: Trading pair
+            leverage: Leverage value (1-125)
+
+        Returns:
+            API response
+        """
+        return self.client.futures_change_leverage(symbol=symbol, leverage=leverage)
+
+    def open_long(self, symbol: str, quantity: Decimal) -> dict[str, Any]:
+        """Open a long position.
+
+        Args:
+            symbol: Trading pair
+            quantity: Amount to buy
+
+        Returns:
+            Order response
+        """
+        return self.client.futures_create_order(
+            symbol=symbol,
+            side="BUY",
+            type="MARKET",
+            quantity=str(quantity),
+        )
+
+    def open_short(self, symbol: str, quantity: Decimal) -> dict[str, Any]:
+        """Open a short position.
+
+        Args:
+            symbol: Trading pair
+            quantity: Amount to sell
+
+        Returns:
+            Order response
+        """
+        return self.client.futures_create_order(
+            symbol=symbol,
+            side="SELL",
+            type="MARKET",
+            quantity=str(quantity),
+        )
+
+    def close_position(self, symbol: str) -> dict[str, Any] | None:
+        """Close current position for a symbol.
+
+        Args:
+            symbol: Trading pair
+
+        Returns:
+            Order response or None if no position
+        """
+        pos = self.get_position(symbol)
+        if pos is None:
+            return None
+
+        amt = abs(float(pos["positionAmt"]))
+        side = "SELL" if float(pos["positionAmt"]) > 0 else "BUY"
+
+        return self.client.futures_create_order(
+            symbol=symbol,
+            side=side,
+            type="MARKET",
+            quantity=str(amt),
+            reduceOnly=True,
+        )
+
+    def get_symbol_info(self, symbol: str) -> dict[str, Any] | None:
+        """Get symbol trading rules.
+
+        Args:
+            symbol: Trading pair
+
+        Returns:
+            Symbol info including filters, or None if not found
+        """
+        exchange_info = self.client.futures_exchange_info()
+        for s in exchange_info.get("symbols", []):
+            if s["symbol"] == symbol:
+                return s
+        return None
+
+    def get_step_size(self, symbol: str) -> Decimal:
+        """Get minimum quantity step size for a symbol.
+
+        Args:
+            symbol: Trading pair
+
+        Returns:
+            Step size for quantity rounding
+        """
+        info = self.get_symbol_info(symbol)
+        if info:
+            for f in info.get("filters", []):
+                if f["filterType"] == "LOT_SIZE":
+                    return Decimal(f["stepSize"])
+        return Decimal("0.001")  # Default
+
+    def get_current_price(self, symbol: str) -> float:
+        """Get current price from API.
+
+        Args:
+            symbol: Trading pair
+
+        Returns:
+            Current price
+        """
+        ticker = self.client.futures_symbol_ticker(symbol=symbol)
+        return float(ticker["price"])
+
+    def get_klines(self, symbol: str, interval: str, limit: int = 200) -> list[Kline]:
+        """Get historical klines.
+
+        Args:
+            symbol: Trading pair
+            interval: Candle interval
+            limit: Number of klines
+
+        Returns:
+            List of Kline objects
+        """
+        return get_klines_from_day_files(self.client, symbol, interval, limit=limit)
+
+
+def get_futures_client(api_key: str, secret_key: str) -> FuturesClient:
+    """Create a futures client for live trading.
+
+    Args:
+        api_key: Binance API key
+        secret_key: Binance secret key
+
+    Returns:
+        FuturesClient instance
+    """
+    return FuturesClient(api_key, secret_key)

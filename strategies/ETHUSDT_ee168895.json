@@ -1,0 +1,111 @@
+{
+  "id": "ETHUSDT_ee168895",
+  "symbol": "ETHUSDT",
+  "created_at": "2025-12-26T02:49:28.353172",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-26",
+    "end_date": "2025-12-26",
+    "generations": 120,
+    "population_size": 600,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 100.0,
+        "weight": 151358.24308913987
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 4
+          }
+        },
+        "target": 60.16707398275489,
+        "weight": -779778.7652417638
+      },
+      {
+        "indicator": {
+          "type": "STOCH",
+          "params": {
+            "fastk_period": 9,
+            "slowk_period": 2
+          }
+        },
+        "target": 0.0,
+        "weight": -997324.525221413
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 144
+          }
+        },
+        "target": -3.1399443021408544,
+        "weight": -711219.3771598783
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 2,
+            "fastk_period": 4
+          }
+        },
+        "target": 80.66187260346526,
+        "weight": 316622.5908082856
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 55
+          }
+        },
+        "target": -27.656005833706654,
+        "weight": -349646.1370856749
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 3
+          }
+        },
+        "target": 38.51599726949482,
+        "weight": -880271.6723410492
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 188
+          }
+        },
+        "target": -26.365534289794482,
+        "weight": -451506.2156903851
+      },
+      {
+        "indicator": {
+          "type": "BBANDS_B",
+          "params": {
+            "period": 33,
+            "nbdev": 2.0180908629576138
+          }
+        },
+        "target": 1.288260355592172,
+        "weight": 608432.9233284827
+      }
+    ],
+    "fitness": 29.33410418392379
+  }
+}

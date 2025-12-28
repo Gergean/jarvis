@@ -59,7 +59,7 @@ class Rule:
         contribution = (value - self.target) * self.weight / self.WEIGHT_SCALE
         return (value, self.target, contribution)
 
-    def mutate(self) -> "Rule":
+    def mutate(self, interval: str = "1h") -> "Rule":
         """Return a mutated copy of this rule.
 
         Randomly mutates one of: indicator, target, or weight.
@@ -70,16 +70,19 @@ class Rule:
             # Mutate indicator parameters or replace with new type
             if random.random() < 0.3:
                 # 30% chance to replace indicator type
-                new_indicator = random_indicator()
+                new_indicator = random_indicator(interval)
             else:
                 # 70% chance to mutate parameters
-                new_indicator = self.indicator.mutate()
+                new_indicator = self.indicator.mutate(interval)
             return Rule(indicator=new_indicator, target=self.target, weight=self.weight)
 
         elif mutation_type == "target":
-            # Mutate target by a small factor
-            factor = random.uniform(0.9, 1.1)
-            new_target = self.target * factor
+            # Mutate target within indicator's valid range
+            min_val, max_val = self.indicator.get_range()
+            # Small random step within range
+            range_size = max_val - min_val
+            step = random.uniform(-0.1, 0.1) * range_size
+            new_target = max(min_val, min(max_val, self.target + step))
             return Rule(indicator=self.indicator, target=new_target, weight=self.weight)
 
         else:  # weight
@@ -92,35 +95,18 @@ class Rule:
             return Rule(indicator=self.indicator, target=self.target, weight=new_weight)
 
     @classmethod
-    def random(cls, price_hint: float | None = None) -> "Rule":
+    def random(cls, price_hint: float | None = None, interval: str = "1h") -> "Rule":
         """Create a random rule.
 
         Args:
-            price_hint: Approximate current price of the asset.
-                        Used to set reasonable target ranges for price-based indicators.
-                        If None, uses a default range suitable for BTC.
+            price_hint: Not used anymore (kept for backwards compatibility).
+            interval: Trading interval for period calculation (e.g., "1h", "4h", "1d").
         """
-        indicator = random_indicator()
+        indicator = random_indicator(interval)
 
-        # Default price hint for backwards compatibility
-        if price_hint is None:
-            price_hint = 50000.0  # BTC-ish default
-
-        # Set initial target based on indicator type
-        indicator_type = indicator.to_dict()["type"]
-        if indicator_type == "RSI":
-            target = random.uniform(20, 80)
-        elif indicator_type in ("MACD", "MACD_HIST"):
-            # MACD values scale with price, use percentage of price
-            target = random.uniform(-0.02, 0.02) * price_hint
-        elif indicator_type == "VOLUME":
-            target = random.uniform(100000, 10000000)
-        elif indicator_type == "PRICE":
-            # Target around current price (+/- 20%)
-            target = random.uniform(0.8, 1.2) * price_hint
-        else:  # SMA, EMA
-            # Moving averages around current price (+/- 20%)
-            target = random.uniform(0.8, 1.2) * price_hint
+        # Get target from indicator's valid range
+        min_val, max_val = indicator.get_range()
+        target = random.uniform(min_val, max_val)
 
         weight = random.uniform(-1_000_000, 1_000_000)
 

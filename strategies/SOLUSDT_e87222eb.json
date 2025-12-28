@@ -1,0 +1,84 @@
+{
+  "id": "SOLUSDT_e87222eb",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-25T13:30:22.937413",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-12-25",
+    "end_date": "2025-12-25",
+    "generations": 60,
+    "population_size": 1000,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 5,
+            "slow": 353,
+            "signal": 3
+          }
+        },
+        "target": 0.7539228030186192,
+        "weight": -432972.5828786886
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 143.34055652478554,
+        "weight": -642993.2433318556
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 11,
+            "slow": 72,
+            "signal": 2
+          }
+        },
+        "target": 1.6135051683031174,
+        "weight": -865316.7540106364
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 54
+          }
+        },
+        "target": 30.446291877223807,
+        "weight": -87158.45617103169
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 7,
+            "slow": 122,
+            "signal": 2
+          }
+        },
+        "target": -1.8217040760668561,
+        "weight": -830085.008534525
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 1600
+          }
+        },
+        "target": 0.6359207385692502,
+        "weight": -707918.2581416995
+      }
+    ],
+    "fitness": 18.827807655835613
+  }
+}

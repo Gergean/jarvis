@@ -37,8 +37,14 @@ uv run python src/jarvis.py train -s BTCUSDT -i 1h --no-walk-forward
 # Test a strategy (out-of-sample)
 uv run python src/jarvis.py test -s BTCUSDT_abc123 -i 1h -l 5
 
-# Trade with strategies (dry run)
-uv run python src/jarvis.py trade-ga -s BTCUSDT_abc123 --dry-run
+# Trade with all accounts (dry run)
+uv run python src/jarvis.py trade --dry-run
+
+# Trade with specific account
+uv run python src/jarvis.py trade -a myaccount --dry-run
+
+# Trade for real (uses accounts/*.env files)
+uv run python src/jarvis.py trade
 
 # Paper trading
 uv run python src/jarvis.py paper init test1 -b 1000 -c BTCUSDT:1h -s BTCUSDT_abc123
@@ -97,12 +103,34 @@ MAX_LEVERAGE = 10
 - `data/binance/{SYMBOL}/{interval}/YYYYMMDD.csv` - Historical OHLCV klines
 - `strategies/*.json` - Saved GA strategies
 - `strategies/elites/` - Daily evolved elite strategies
+- `accounts/*.env` - Trading account configurations (API keys, strategies)
 - `paper/*.json` - Paper trading wallets
 - `results/*.json` - Test results
 
+## Multi-Account Trading
+
+Account configurations are stored in `accounts/*.env` files:
+
+```bash
+# accounts/myaccount.env
+BINANCE_API_KEY=xxx
+BINANCE_SECRET_KEY=yyy
+STRATEGY=BTCUSDT_abc123    # Strategy ID to use
+INTERVAL=1h                 # Trading interval
+LEVERAGE=5                  # Futures leverage (1-125)
+INVESTMENT_RATIO=0.2        # Portion of balance per trade
+```
+
+Trade command runs all accounts or a specific one:
+```bash
+uv run python src/jarvis.py trade              # All accounts
+uv run python src/jarvis.py trade -a myaccount # Specific account
+uv run python src/jarvis.py trade --dry-run    # Test without trading
+```
+
 ## Environment Variables
 
-Required in `.env`:
+Required in `.env` (for non-trading commands):
 ```
 BINANCE_API_KEY=...
 BINANCE_SECRET_KEY=...
@@ -184,13 +212,24 @@ MAX_LEVERAGE = 10
   - Supports offline mode (fake=True) with default symbol info
   - Caches klines locally in `data/binance/{SYMBOL}/{interval}/YYYYMMDD.csv`
   - Methods: `get_klines()`, `get_avg_price()`, `create_order()`, `get_symbol_info()`
+- `FuturesClient` - Live futures trading client
+  - Methods: `get_account()`, `get_balance()`, `get_position()`, `set_leverage()`
+  - Methods: `open_long()`, `open_short()`, `close_position()`
 
 **Functions:**
-- `get_binance_client(fake=False, extra_params=None)` - Factory for client
+- `get_binance_client(fake=False, extra_params=None)` - Factory for CachedClient
+- `get_futures_client(api_key, secret_key)` - Factory for FuturesClient
 - `get_day_file_path(symbol, interval, day)` - Path to CSV file
 - `create_day_file(client, symbol, interval, day)` - Fetch and save klines
 - `load_day_file(symbol, interval, day)` - Load klines from CSV (cached with @ring.lru)
 - `get_klines_from_day_files(...)` - Load klines from multiple day files
+
+### `jarvis/accounts.py` - Account Management
+
+- `Account` - Dataclass: name, api_key, secret_key, strategy_id, interval, leverage, investment_ratio
+- `discover_accounts()` - Find all accounts in `accounts/` directory
+- `load_account(name)` - Load single account from `accounts/{name}.env`
+- `load_all_accounts()` - Load all accounts
 
 ### `jarvis/genetics/` - Genetic Algorithm System
 
@@ -214,8 +253,9 @@ MAX_LEVERAGE = 10
 **`population.py` - Evolution:**
 - `Population` - Collection of individuals that evolve
 - `create_random()` - From seed or random individuals
-- `evaluate_fitness()` - Backtest all individuals (fitness = return - buy&hold)
+- `evaluate_fitness()` - Backtest all individuals (fitness = return - buy&hold, for single-period)
 - `evolve()` - Tournament selection, crossover, mutation, elitism
+- Note: `train.py` uses walk-forward validation with different fitness: `Σ(returns) - Σ(drawdowns)`
 
 **`strategy.py` - Persistence:**
 - `TrainingConfig` - Training metadata (dates, generations, etc.)
@@ -226,7 +266,9 @@ MAX_LEVERAGE = 10
 
 - `train.py` - GA training with walk-forward validation
 - `test.py` - Out-of-sample strategy testing
-- `trade.py` - Live futures trading (trade_with_strategies for GA)
+- `trade.py` - Multi-account live futures trading
+  - `trade()` - Run all accounts or specific account
+  - `trade_account()` - Execute trading for single account
 - `paper.py` - Paper trading simulation (paper_init, paper_trade, paper_info, paper_list)
 - `download.py` - Fetch historical klines from Binance
 - `pinescript.py` - Export strategy to TradingView Pine Script

@@ -10,6 +10,27 @@ from pydantic import BaseModel
 
 from jarvis.utils import timestamp_to_datetime
 
+__all__ = [
+    # Enums
+    "ActionType",
+    "Color",
+    "PositionSide",
+    # Models
+    "FakeResponse",
+    "FuturesPosition",
+    "Kline",
+    "Position",
+    # Constants (re-exported from settings)
+    "DEFAULT_LEVERAGE",
+    "FUNDING_FEE_RATE",
+    "FUNDING_INTERVAL_HOURS",
+    "FUTURES_MAKER_FEE",
+    "FUTURES_TAKER_FEE",
+    "MAX_LEVERAGE",
+    # Utilities (re-exported)
+    "validate_leverage",
+]
+
 
 class Kline(BaseModel):
     """Binance kline (candlestick) data.
@@ -97,13 +118,16 @@ class Position:
     amount: Decimal
 
 
-# Futures trading constants
-FUTURES_TAKER_FEE = Decimal("0.0004")  # 0.04%
-FUTURES_MAKER_FEE = Decimal("0.0002")  # 0.02%
-FUNDING_FEE_RATE = Decimal("0.0001")   # 0.01% per 8 hours
-FUNDING_INTERVAL_HOURS = 8
-DEFAULT_LEVERAGE = 1
-MAX_LEVERAGE = 10
+# Re-export constants from settings for backwards compatibility
+from jarvis.settings import (  # noqa: E402, F401
+    DEFAULT_LEVERAGE,
+    FUNDING_FEE_RATE,
+    FUNDING_INTERVAL_HOURS,
+    FUTURES_MAKER_FEE,
+    FUTURES_TAKER_FEE,
+    MAX_LEVERAGE,
+)
+from jarvis.utils import validate_leverage  # noqa: E402, F401
 
 
 @dataclass

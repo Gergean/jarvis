@@ -490,6 +490,7 @@ def _evolve_elite(
         rules_per_individual=len(seed_individual.rules),
         price_hint=price_hint,
         seed_individual=seed_individual,
+        interval=interval,
     )
 
     # Prepare evaluation data
@@ -571,7 +572,7 @@ def _evolve_elite(
             ret, dd, trades = evaluate_individual(ind)
             ind.fitness = ret - dd  # Simple fitness
 
-        population = population.evolve(price_hint=price_hint)
+        population = population.evolve(price_hint=price_hint, interval=interval)
 
     # Evaluate final generation
     for ind in population.individuals:

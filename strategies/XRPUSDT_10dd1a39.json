@@ -1,0 +1,110 @@
+{
+  "id": "XRPUSDT_10dd1a39",
+  "symbol": "XRPUSDT",
+  "created_at": "2025-12-26T04:16:54.570685",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-26",
+    "end_date": "2025-12-26",
+    "generations": 120,
+    "population_size": 600,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 222,
+            "fastk_period": 3
+          }
+        },
+        "target": 97.12904143135792,
+        "weight": -778466.4592820654
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 67.54063463303955,
+        "weight": 1119264.218235662
+      },
+      {
+        "indicator": {
+          "type": "STOCH",
+          "params": {
+            "fastk_period": 3,
+            "slowk_period": 4
+          }
+        },
+        "target": 62.447522409322396,
+        "weight": 677527.1072002299
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 41.26032696989686,
+        "weight": 543007.5955966837
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 147
+          }
+        },
+        "target": -29.265949198450556,
+        "weight": -798675.0306097865
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 123
+          }
+        },
+        "target": -140.2000325930723,
+        "weight": -413492.74202661985
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 67.62145607129277,
+        "weight": 837530.1099062122
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 160
+          }
+        },
+        "target": 2.685454897940293,
+        "weight": -750107.2933890356
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 76
+          }
+        },
+        "target": 2.6354919500173466,
+        "weight": -542783.895099882
+      }
+    ],
+    "fitness": 44.979309965838524
+  }
+}

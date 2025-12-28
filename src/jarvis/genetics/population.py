@@ -48,6 +48,7 @@ class Population:
         rules_per_individual: int = 5,
         price_hint: float | None = None,
         seed_individual: Individual | None = None,
+        interval: str = "1h",
     ) -> "Population":
         """Create a population from seed individual with varying mutation levels.
 
@@ -56,6 +57,7 @@ class Population:
             rules_per_individual: Number of rules per individual
             price_hint: Approximate price of the asset for setting target ranges
             seed_individual: If provided, create all individuals as mutations of seed
+            interval: Trading interval for period calculation (e.g., "1h", "4h", "1d")
         """
         individuals = []
 
@@ -72,19 +74,19 @@ class Population:
 
             # Light mutations (10% rate) - small tweaks
             for _ in range(num_light):
-                individuals.append(seed_individual.mutate(mutation_rate=0.1))
+                individuals.append(seed_individual.mutate(mutation_rate=0.1, interval=interval))
 
             # Medium mutations (30% rate) - moderate changes
             for _ in range(num_medium):
-                individuals.append(seed_individual.mutate(mutation_rate=0.3))
+                individuals.append(seed_individual.mutate(mutation_rate=0.3, interval=interval))
 
             # Aggressive mutations (60% rate) - major changes
             for _ in range(num_aggressive):
-                individuals.append(seed_individual.mutate(mutation_rate=0.6))
+                individuals.append(seed_individual.mutate(mutation_rate=0.6, interval=interval))
         else:
             # No seed - create random individuals
             while len(individuals) < population_size:
-                individuals.append(Individual.random(rules_per_individual, price_hint=price_hint))
+                individuals.append(Individual.random(rules_per_individual, price_hint=price_hint, interval=interval))
 
         return cls(individuals=individuals, population_size=population_size)
 
@@ -306,7 +308,7 @@ class Population:
 
         return tournament(), tournament()
 
-    def evolve(self, price_hint: float | None = None) -> "Population":
+    def evolve(self, price_hint: float | None = None, interval: str = "1h") -> "Population":
         """Evolve to the next generation.
 
         1. Keep top individuals (elitism)
@@ -316,6 +318,7 @@ class Population:
 
         Args:
             price_hint: Approximate price of the asset for random individuals
+            interval: Trading interval for period calculation (e.g., "1h", "4h", "1d")
         """
         # Sort by fitness
         sorted_individuals = sorted(self.individuals, key=lambda x: x.fitness, reverse=True)
@@ -327,13 +330,13 @@ class Population:
         # Add some random individuals (prevent overfitting)
         num_random = max(1, int(self.population_size * 0.1))
         for _ in range(num_random):
-            new_individuals.append(Individual.random(price_hint=price_hint))
+            new_individuals.append(Individual.random(price_hint=price_hint, interval=interval))
 
         # Fill rest with children
         while len(new_individuals) < self.population_size:
             parent1, parent2 = self.select_parents()
-            child = Individual.crossover(parent1, parent2)
-            child = child.mutate(self.mutation_rate)
+            child = Individual.crossover(parent1, parent2, interval=interval)
+            child = child.mutate(self.mutation_rate, interval=interval)
             new_individuals.append(child)
 
         return Population(

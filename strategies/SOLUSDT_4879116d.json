@@ -1,0 +1,100 @@
+{
+  "id": "SOLUSDT_4879116d",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-25T22:13:30.911890",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-25",
+    "end_date": "2025-12-25",
+    "generations": 60,
+    "population_size": 1000,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "WILLR",
+          "params": {
+            "period": 495
+          }
+        },
+        "target": 147.0630316879504,
+        "weight": 472141.60606463504
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 79
+          }
+        },
+        "target": 134.71723192835904,
+        "weight": 672261.1918461313
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 13
+          }
+        },
+        "target": 65.4157581689264,
+        "weight": 863695.2631851796
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 45,
+            "fastk_period": 5
+          }
+        },
+        "target": 129.7850038348109,
+        "weight": 226786.87889631325
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 4
+          }
+        },
+        "target": 104.1162165118897,
+        "weight": -38439.001461559674
+      },
+      {
+        "indicator": {
+          "type": "STOCH",
+          "params": {
+            "fastk_period": 47,
+            "slowk_period": 5
+          }
+        },
+        "target": 103.97233673246618,
+        "weight": 870656.6029438581
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 121
+          }
+        },
+        "target": 109.75297099998254,
+        "weight": -980513.739610871
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 24
+          }
+        },
+        "target": 102.67488001398117,
+        "weight": -991805.211063766
+      }
+    ],
+    "fitness": 20.492082125211255
+  }
+}

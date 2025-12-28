@@ -1,0 +1,98 @@
+{
+  "id": "DOTUSDT_7a776159",
+  "symbol": "DOTUSDT",
+  "created_at": "2025-12-27T13:17:34.481038",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-27",
+    "end_date": "2025-12-27",
+    "generations": 100,
+    "population_size": 1000,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 190
+          }
+        },
+        "target": 28.154960282632892,
+        "weight": -478313.32439892204
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 27.91189058449538,
+        "weight": -694893.6372160563
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 99
+          }
+        },
+        "target": -156.20295163706166,
+        "weight": -532940.2150431293
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 171
+          }
+        },
+        "target": 12.450674307464123,
+        "weight": -880009.9596782745
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 92
+          }
+        },
+        "target": 54.97104545526032,
+        "weight": -711318.8788459533
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 6
+          }
+        },
+        "target": 39.86711439126711,
+        "weight": 820456.5019662762
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 95
+          }
+        },
+        "target": 8.340633891358166,
+        "weight": -1122385.5001959081
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 84
+          }
+        },
+        "target": 36.179176914422754,
+        "weight": 890117.1566829563
+      }
+    ],
+    "fitness": 50.74962123285641
+  }
+}

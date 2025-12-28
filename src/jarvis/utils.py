@@ -1,9 +1,13 @@
 """Utility functions for the Jarvis trading system."""
 
 import calendar
+import fcntl
+import json
+import re
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, TypeVar
 
 from binance.helpers import interval_to_milliseconds
@@ -11,6 +15,96 @@ from binance.helpers import interval_to_milliseconds
 T = TypeVar("T")
 
 DAY_AS_TIMEDELTA = timedelta(days=1)
+
+# Validation patterns
+SYMBOL_PATTERN = re.compile(r"^[A-Z]{3,20}$")
+INTERVAL_PATTERN = re.compile(r"^[1-9][0-9]?[mhdwM]$")
+
+
+# === Datetime utilities ===
+
+def utcnow() -> datetime:
+    """Return current UTC time as naive datetime for JSON serialization.
+
+    >>> isinstance(utcnow(), datetime)
+    True
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+# === Validation utilities ===
+
+def validate_symbol(symbol: str) -> None:
+    """Validate symbol to prevent path traversal attacks.
+
+    >>> validate_symbol('BTCUSDT')
+    >>> validate_symbol('../etc')
+    Traceback (most recent call last):
+    ...
+    ValueError: Invalid symbol format: ../etc
+    """
+    if not SYMBOL_PATTERN.match(symbol):
+        raise ValueError(f"Invalid symbol format: {symbol}")
+
+
+def validate_interval(interval: str) -> None:
+    """Validate interval to prevent path traversal attacks.
+
+    >>> validate_interval('1h')
+    >>> validate_interval('4h')
+    >>> validate_interval('../')
+    Traceback (most recent call last):
+    ...
+    ValueError: Invalid interval format: ../
+    """
+    if not INTERVAL_PATTERN.match(interval):
+        raise ValueError(f"Invalid interval format: {interval}")
+
+
+def validate_leverage(leverage: int) -> int:
+    """Validate leverage is within allowed bounds.
+
+    >>> validate_leverage(5)
+    5
+    >>> validate_leverage(0)
+    Traceback (most recent call last):
+    ...
+    ValueError: Leverage must be between 1 and 10, got 0
+    >>> validate_leverage(100)
+    Traceback (most recent call last):
+    ...
+    ValueError: Leverage must be between 1 and 10, got 100
+    """
+    from jarvis.settings import MAX_LEVERAGE
+
+    if leverage < 1 or leverage > MAX_LEVERAGE:
+        raise ValueError(f"Leverage must be between 1 and {MAX_LEVERAGE}, got {leverage}")
+    return leverage
+
+
+# === File utilities ===
+
+def atomic_json_write(path: Path, data: dict) -> None:
+    """Write JSON file with file locking to prevent race conditions."""
+    with open(path, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            json.dump(data, f, indent=2)
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def atomic_json_read(path: Path) -> dict:
+    """Read JSON file with file locking."""
+    with open(path) as f:
+        fcntl.flock(f, fcntl.LOCK_SH)
+        try:
+            return json.load(f)
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+# === Interval utilities ===
 
 
 def interval_to_seconds(interval: str) -> int:
@@ -34,6 +128,21 @@ def interval_to_timedelta(interval: str) -> timedelta:
     True
     """
     return timedelta(seconds=interval_to_seconds(interval))
+
+
+def interval_to_hours(interval: str) -> float:
+    """Convert Binance interval strings to hours.
+
+    >>> interval_to_hours('1h')
+    1.0
+    >>> interval_to_hours('4h')
+    4.0
+    >>> interval_to_hours('1d')
+    24.0
+    >>> interval_to_hours('15m')
+    0.25
+    """
+    return interval_to_seconds(interval) / 3600
 
 
 def flatten_list_of_lists(lst: list[list[T]]) -> list[T]:
@@ -226,5 +335,10 @@ def calculate_avg_buy_price(quantity: float, price: float, last_quantity: float,
     150.0
     >>> calculate_avg_buy_price(2, 300, 1, 100)
     233.33333333333334
+    >>> calculate_avg_buy_price(0, 0, 0, 0)
+    0.0
     """
-    return (price * quantity + last_quantity * last_avg_price) / (last_quantity + quantity)
+    total_quantity = last_quantity + quantity
+    if total_quantity == 0:
+        return 0.0
+    return (price * quantity + last_quantity * last_avg_price) / total_quantity

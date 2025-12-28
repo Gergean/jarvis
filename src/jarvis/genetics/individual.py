@@ -90,11 +90,12 @@ class Individual:
 
         return ActionType.STAY
 
-    def mutate(self, mutation_rate: float = 0.1) -> "Individual":
+    def mutate(self, mutation_rate: float = 0.1, interval: str = "1h") -> "Individual":
         """Return a mutated copy of this individual.
 
         Args:
             mutation_rate: Probability of mutating each rule
+            interval: Trading interval for period calculation (e.g., "1h", "4h", "1d")
 
         Returns:
             A new Individual with mutated rules
@@ -102,7 +103,7 @@ class Individual:
         new_rules = []
         for rule in self.rules:
             if random.random() < mutation_rate:
-                new_rules.append(rule.mutate())
+                new_rules.append(rule.mutate(interval))
             else:
                 new_rules.append(copy.deepcopy(rule))
 
@@ -112,12 +113,12 @@ class Individual:
             new_rules.pop(random.randint(0, len(new_rules) - 1))
         elif random.random() < 0.05:
             # Add a new random rule
-            new_rules.append(Rule.random())
+            new_rules.append(Rule.random(interval=interval))
 
         return Individual(rules=new_rules, fitness=0.0)
 
     @classmethod
-    def crossover(cls, parent1: "Individual", parent2: "Individual") -> "Individual":
+    def crossover(cls, parent1: "Individual", parent2: "Individual", interval: str = "1h") -> "Individual":
         """Create a child by combining rules from two parents.
 
         Uses uniform crossover: each rule is randomly taken from either parent.
@@ -144,19 +145,20 @@ class Individual:
 
         # Ensure at least one rule
         if not child_rules:
-            child_rules.append(Rule.random())
+            child_rules.append(Rule.random(interval=interval))
 
         return cls(rules=child_rules, fitness=0.0)
 
     @classmethod
-    def random(cls, num_rules: int = 5, price_hint: float | None = None) -> "Individual":
+    def random(cls, num_rules: int = 5, price_hint: float | None = None, interval: str = "1h") -> "Individual":
         """Create a random individual with the specified number of rules.
 
         Args:
             num_rules: Number of rules to generate
             price_hint: Approximate price of the asset for setting target ranges
+            interval: Trading interval for period calculation (e.g., "1h", "4h", "1d")
         """
-        rules = [Rule.random(price_hint=price_hint) for _ in range(num_rules)]
+        rules = [Rule.random(price_hint=price_hint, interval=interval) for _ in range(num_rules)]
         return cls(rules=rules, fitness=0.0)
 
     def to_dict(self) -> dict[str, Any]:

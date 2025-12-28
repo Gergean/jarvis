@@ -1,0 +1,101 @@
+{
+  "id": "SOLUSDT_52aca2d5",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-27T23:05:17.020838",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-27",
+    "end_date": "2025-12-27",
+    "generations": 30,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "WILLR",
+          "params": {
+            "period": 51
+          }
+        },
+        "target": 0.049468925063282265,
+        "weight": 285547.69662132993
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 59.9055375688577,
+        "weight": -786588.3968802935
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 2,
+            "fastk_period": 4
+          }
+        },
+        "target": 86.59453989286577,
+        "weight": 976700.9152048429
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 172
+          }
+        },
+        "target": -79.00004599659579,
+        "weight": -620084.9744427415
+      },
+      {
+        "indicator": {
+          "type": "STOCH",
+          "params": {
+            "fastk_period": 13,
+            "slowk_period": 4
+          }
+        },
+        "target": 99.31508614952996,
+        "weight": -766832.0256875339
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 111
+          }
+        },
+        "target": -91.43241244156826,
+        "weight": -995577.9323522291
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 12
+          }
+        },
+        "target": 10.61198773036293,
+        "weight": 357789.892894243
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 17,
+            "fastk_period": 6
+          }
+        },
+        "target": 78.90695425149524,
+        "weight": 46858.34862229235
+      }
+    ],
+    "fitness": 6.303136810089887
+  }
+}

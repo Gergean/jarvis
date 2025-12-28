@@ -1,0 +1,94 @@
+{
+  "id": "SOLUSDT_eaefacc2",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-24T20:28:42.456805",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-24",
+    "end_date": "2025-12-24",
+    "generations": 100,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 8,
+            "slow": 25,
+            "signal": 7
+          }
+        },
+        "target": -1.7591826146312712,
+        "weight": -381955.37911897537
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 18
+          }
+        },
+        "target": 37.03486070032718,
+        "weight": 566609.7710346668
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 107
+          }
+        },
+        "target": 134.02872069991906,
+        "weight": 479040.7916607347
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 15,
+            "slow": 32,
+            "signal": 9
+          }
+        },
+        "target": 2.2009788768361696,
+        "weight": -619227.7062904787
+      },
+      {
+        "indicator": {
+          "type": "MACD_HIST",
+          "params": {
+            "fast": 12,
+            "slow": 37,
+            "signal": 5
+          }
+        },
+        "target": -1.9314562597170548,
+        "weight": -581659.6462903259
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 6
+          }
+        },
+        "target": 20.89924241389334,
+        "weight": 437181.7015696429
+      },
+      {
+        "indicator": {
+          "type": "PRICE",
+          "params": {
+            "period": 1
+          }
+        },
+        "target": 132.37410128430366,
+        "weight": -721434.4113878277
+      }
+    ],
+    "fitness": -0.8582278997002319
+  }
+}

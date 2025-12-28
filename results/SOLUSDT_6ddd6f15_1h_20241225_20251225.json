@@ -1,0 +1,820 @@
+{
+  "strategy_id": "SOLUSDT_6ddd6f15",
+  "symbol": "SOLUSDT",
+  "interval": "1h",
+  "start_date": "2024-12-25",
+  "end_date": "2025-12-25",
+  "result_type": "walk_forward",
+  "return_pct": -32.67244979733159,
+  "max_drawdown_pct": 19.12903279660251,
+  "total_trades": 12,
+  "final_equity": 67.3275502026684,
+  "peak_equity": 100.0,
+  "windows": [
+    {
+      "window_num": 1,
+      "start_date": "2024-12-25",
+      "end_date": "2025-01-24",
+      "return_pct": -100.0,
+      "max_drawdown_pct": 27.4716,
+      "trades": 1,
+      "liquidated": true,
+      "signals": [
+        {
+          "timestamp": "2024-12-25T00:00:00",
+          "action": "SHORT",
+          "price": 197.47,
+          "score": -23575869.6613,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": -3.689889,
+              "target": -1.219408,
+              "contribution": -19.1339
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.251676,
+              "target": 3600565.863302,
+              "contribution": -23575500.9719
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 196.473,
+              "target": 119.285275,
+              "contribution": 278.5562
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 190.669,
+              "target": 110.483861,
+              "contribution": -323.8855
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 197.299522,
+              "target": 131.182453,
+              "contribution": 285.3592
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 2,
+      "start_date": "2025-01-24",
+      "end_date": "2025-02-23",
+      "return_pct": 0.9338,
+      "max_drawdown_pct": 10.4575,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-01-24T00:00:00",
+          "action": "SHORT",
+          "price": 252.73,
+          "score": -23575617.4693,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": 5.801831,
+              "target": -1.219408,
+              "contribution": 54.3797
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 0.707566,
+              "target": 3600565.863302,
+              "contribution": -23575504.5345
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 250.354,
+              "target": 119.285275,
+              "contribution": 473.0027
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 252.70425,
+              "target": 110.483861,
+              "contribution": -574.4596
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 252.528987,
+              "target": 131.182453,
+              "contribution": 523.7278
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 3,
+      "start_date": "2025-02-23",
+      "end_date": "2025-03-25",
+      "return_pct": 0.9172,
+      "max_drawdown_pct": 23.5181,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-02-23T00:00:00",
+          "action": "SHORT",
+          "price": 171.89,
+          "score": -23575988.2591,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": -3.218192,
+              "target": -1.219408,
+              "contribution": -15.4806
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.326326,
+              "target": 3600565.863302,
+              "contribution": -23575500.4831
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 172.78,
+              "target": 119.285275,
+              "contribution": 193.0525
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 172.87475,
+              "target": 110.483861,
+              "contribution": -252.0106
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 172.018707,
+              "target": 131.182453,
+              "contribution": 176.248
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 4,
+      "start_date": "2025-03-25",
+      "end_date": "2025-04-24",
+      "return_pct": 1.0063,
+      "max_drawdown_pct": 29.2183,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-03-25T00:00:00",
+          "action": "SHORT",
+          "price": 142.13,
+          "score": -23576047.2929,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": 2.054343,
+              "target": -1.219408,
+              "contribution": 25.3553
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.038548,
+              "target": 3600565.863302,
+              "contribution": -23575502.3674
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 141.946,
+              "target": 119.285275,
+              "contribution": 81.7784
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 137.22175,
+              "target": 110.483861,
+              "contribution": -108.0002
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 141.730828,
+              "target": 131.182453,
+              "contribution": 45.5265
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 5,
+      "start_date": "2025-04-24",
+      "end_date": "2025-05-24",
+      "return_pct": -100.0,
+      "max_drawdown_pct": 23.7572,
+      "trades": 1,
+      "liquidated": true,
+      "signals": [
+        {
+          "timestamp": "2025-04-24T00:00:00",
+          "action": "SHORT",
+          "price": 150.15,
+          "score": -23576011.2572,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": 3.158067,
+              "target": -1.219408,
+              "contribution": 33.9037
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.363055,
+              "target": 3600565.863302,
+              "contribution": -23575500.2426
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 150.912,
+              "target": 119.285275,
+              "contribution": 114.135
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 148.297,
+              "target": 110.483861,
+              "contribution": -152.7356
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 150.475396,
+              "target": 131.182453,
+              "contribution": 83.2677
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 6,
+      "start_date": "2025-05-24",
+      "end_date": "2025-06-23",
+      "return_pct": 1.0137,
+      "max_drawdown_pct": 12.3021,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-05-24T00:00:00",
+          "action": "SHORT",
+          "price": 172.75,
+          "score": -23575955.1187,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": 1.73718,
+              "target": -1.219408,
+              "contribution": 22.8989
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.125181,
+              "target": 3600565.863302,
+              "contribution": -23575501.8001
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 177.814,
+              "target": 119.285275,
+              "contribution": 211.2193
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 179.8395,
+              "target": 110.483861,
+              "contribution": -280.1427
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 173.418944,
+              "target": 131.182453,
+              "contribution": 182.2914
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 7,
+      "start_date": "2025-06-23",
+      "end_date": "2025-07-23",
+      "return_pct": -100.0,
+      "max_drawdown_pct": 19.3015,
+      "trades": 1,
+      "liquidated": true,
+      "signals": [
+        {
+          "timestamp": "2025-06-23T00:00:00",
+          "action": "SHORT",
+          "price": 132.52,
+          "score": -23576159.1322,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": -2.904192,
+              "target": -1.219408,
+              "contribution": -13.0487
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.143031,
+              "target": 3600565.863302,
+              "contribution": -23575501.6832
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 130.227,
+              "target": 119.285275,
+              "contribution": 39.4867
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 134.904,
+              "target": 110.483861,
+              "contribution": -98.6383
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 132.18727,
+              "target": 131.182453,
+              "contribution": 4.3368
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 8,
+      "start_date": "2025-07-23",
+      "end_date": "2025-08-22",
+      "return_pct": 0.9959,
+      "max_drawdown_pct": 20.1426,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-07-23T00:00:00",
+          "action": "SHORT",
+          "price": 204.29,
+          "score": -23575776.0319,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": 5.75269,
+              "target": -1.219408,
+              "contribution": 53.9991
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.086166,
+              "target": 3600565.863302,
+              "contribution": -23575502.0556
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 202.393,
+              "target": 119.285275,
+              "contribution": 299.9204
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 198.10925,
+              "target": 110.483861,
+              "contribution": -353.9383
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 204.312708,
+              "target": 131.182453,
+              "contribution": 315.6279
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 9,
+      "start_date": "2025-08-22",
+      "end_date": "2025-09-21",
+      "return_pct": -100.0,
+      "max_drawdown_pct": 20.7732,
+      "trades": 1,
+      "liquidated": true,
+      "signals": [
+        {
+          "timestamp": "2025-08-22T00:00:00",
+          "action": "SHORT",
+          "price": 181.15,
+          "score": -23575954.1829,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": -1.941743,
+              "target": -1.219408,
+              "contribution": -5.5945
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.378701,
+              "target": 3600565.863302,
+              "contribution": -23575500.1401
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 181.131,
+              "target": 119.285275,
+              "contribution": 223.1897
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 184.03075,
+              "target": 110.483861,
+              "contribution": -297.0721
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 181.001986,
+              "target": 131.182453,
+              "contribution": 215.0195
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 10,
+      "start_date": "2025-09-21",
+      "end_date": "2025-10-21",
+      "return_pct": 0.9823,
+      "max_drawdown_pct": 15.1722,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-09-21T00:00:00",
+          "action": "SHORT",
+          "price": 240.68,
+          "score": -23575698.1824,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": -0.525177,
+              "target": -1.219408,
+              "contribution": 5.3768
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.336694,
+              "target": 3600565.863302,
+              "contribution": -23575500.4152
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 239.648,
+              "target": 119.285275,
+              "contribution": 434.3667
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 238.97825,
+              "target": 110.483861,
+              "contribution": -519.0172
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 240.333333,
+              "target": 131.182453,
+              "contribution": 471.0918
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 11,
+      "start_date": "2025-10-21",
+      "end_date": "2025-11-20",
+      "return_pct": 1.0056,
+      "max_drawdown_pct": 13.0484,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-10-21T00:00:00",
+          "action": "SHORT",
+          "price": 189.0,
+          "score": -23575909.8458,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": -1.266248,
+              "target": -1.219408,
+              "contribution": -0.3628
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 1.185768,
+              "target": 3600565.863302,
+              "contribution": -23575501.4034
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 189.168,
+              "target": 119.285275,
+              "contribution": 252.1938
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 190.08075,
+              "target": 110.483861,
+              "contribution": -321.5094
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 189.29719,
+              "target": 131.182453,
+              "contribution": 250.8214
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "window_num": 12,
+      "start_date": "2025-11-20",
+      "end_date": "2025-12-20",
+      "return_pct": 1.0757,
+      "max_drawdown_pct": 14.3857,
+      "trades": 1,
+      "liquidated": false,
+      "signals": [
+        {
+          "timestamp": "2025-11-20T00:00:00",
+          "action": "SHORT",
+          "price": 137.72,
+          "score": -23576135.9129,
+          "rule_contributions": [
+            {
+              "rule": "EMA({'period': 1427}) > 120.80 * +641840.769",
+              "value": 0.0,
+              "target": 120.796245,
+              "contribution": -775.3195
+            },
+            {
+              "rule": "MACD({'fast': 84, 'slow': 134, 'signal': 38}) > -1.22 * +774502.829",
+              "value": -2.628348,
+              "target": -1.219408,
+              "contribution": -10.9123
+            },
+            {
+              "rule": "VOLUME({'period': 4}) > 3600565.86 * +654772.335",
+              "value": 0.80721,
+              "target": 3600565.863302,
+              "contribution": -23575503.8821
+            },
+            {
+              "rule": "MACD({'fast': 11, 'slow': 167, 'signal': 60}) > 1.72 * +640064.634",
+              "value": 0.0,
+              "target": 1.720499,
+              "contribution": -11.0123
+            },
+            {
+              "rule": "SMA({'period': 10}) > 119.29 * +360881.445",
+              "value": 134.248,
+              "target": 119.285275,
+              "contribution": 53.9977
+            },
+            {
+              "rule": "SMA({'period': 533}) > 111.31 * -176751.009",
+              "value": 0.0,
+              "target": 111.312791,
+              "contribution": 196.7465
+            },
+            {
+              "rule": "SMA({'period': 40}) > 110.48 * -403922.081",
+              "value": 138.192,
+              "target": 110.483861,
+              "contribution": -111.9193
+            },
+            {
+              "rule": "EMA({'period': 2}) > 131.18 * +431596.846",
+              "value": 137.296589,
+              "target": 131.182453,
+              "contribution": 26.3884
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "created_at": "2025-12-25T09:42:52.760158"
+}

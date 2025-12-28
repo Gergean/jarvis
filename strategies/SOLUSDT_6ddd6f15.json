@@ -1,0 +1,102 @@
+{
+  "id": "SOLUSDT_6ddd6f15",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-25T09:42:52.760060",
+  "training": {
+    "interval": "1h",
+    "start_date": "2024-12-25",
+    "end_date": "2025-12-25",
+    "generations": 60,
+    "population_size": 100,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 1427
+          }
+        },
+        "target": 120.79624522530662,
+        "weight": 641840.7687364803
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 84,
+            "slow": 134,
+            "signal": 38
+          }
+        },
+        "target": -1.2194081847374465,
+        "weight": 774502.8293264413
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 4
+          }
+        },
+        "target": 3600565.863302476,
+        "weight": 654772.334753599
+      },
+      {
+        "indicator": {
+          "type": "MACD",
+          "params": {
+            "fast": 11,
+            "slow": 167,
+            "signal": 60
+          }
+        },
+        "target": 1.7204991287504237,
+        "weight": 640064.6342456692
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 10
+          }
+        },
+        "target": 119.28527528682076,
+        "weight": 360881.44521275884
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 533
+          }
+        },
+        "target": 111.31279146092615,
+        "weight": -176751.0090899556
+      },
+      {
+        "indicator": {
+          "type": "SMA",
+          "params": {
+            "period": 40
+          }
+        },
+        "target": 110.48386063125383,
+        "weight": -403922.08122254594
+      },
+      {
+        "indicator": {
+          "type": "EMA",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 131.18245255624907,
+        "weight": 431596.84635264426
+      }
+    ],
+    "fitness": 0.0
+  }
+}

@@ -26,6 +26,7 @@ from jarvis.genetics.strategy import (
     WindowResult as WindowResultModel,
 )
 from jarvis.logging import logger
+from jarvis.settings import notify
 from jarvis.models import (
     DEFAULT_LEVERAGE,
     FUNDING_FEE_RATE,
@@ -58,6 +59,7 @@ class WindowResult:
     max_drawdown_pct: float
     trades: int
     liquidated: bool
+    buy_hold_pct: float = 0.0  # Buy & hold return for this window
 
 
 def _run_backtest_on_preloaded(
@@ -91,7 +93,13 @@ def _run_backtest_on_preloaded(
             "max_drawdown_pct": 0.0,
             "total_trades": 0,
             "liquidated": False,
+            "buy_hold_pct": 0.0,
         }
+
+    # Calculate buy & hold return (first price to last price)
+    first_price = ohlcv_data[0][1]  # price from first candle
+    last_price = ohlcv_data[-1][1]  # price from last candle
+    buy_hold_pct = float((last_price - first_price) / first_price * 100) if first_price > 0 else 0.0
 
     # === ACCOUNT STATE ===
     # margin_balance: Available cash (not locked in positions)
@@ -259,6 +267,7 @@ def _run_backtest_on_preloaded(
         "max_drawdown_pct": max_drawdown_pct,
         "total_trades": total_trades,
         "liquidated": liquidated,
+        "buy_hold_pct": buy_hold_pct,
     }
 
 
@@ -445,6 +454,84 @@ def _run_backtest_with_signals(
     }, signals
 
 
+from enum import Enum
+
+
+class FitnessType(Enum):
+    """Available fitness functions for strategy evaluation."""
+    LEGACY = "legacy"      # sum(returns) - sum(drawdowns)
+    ALPHA = "alpha"        # sum(alphas) - sum(drawdowns), alpha = return - buy_hold
+    CALMAR = "calmar"      # sum(returns) / max(sum(drawdowns), 1)
+    SHARPE = "sharpe"      # mean(returns) / std(returns)
+
+
+def _calculate_fitness_legacy(
+    total_return: float,
+    total_drawdown: float,
+    any_liquidation: bool,
+) -> float:
+    """Legacy fitness function: sum(returns) - sum(drawdowns).
+
+    This was the original fitness function. Kept for reference/comparison.
+    """
+    if any_liquidation:
+        return 0.0
+    return total_return - total_drawdown
+
+
+def _calculate_fitness_alpha(
+    total_alpha: float,
+    total_drawdown: float,
+    any_liquidation: bool,
+) -> float:
+    """Alpha-based fitness: sum(alphas) - sum(drawdowns).
+
+    Alpha = strategy_return - buy_hold_return for each window.
+    This rewards strategies that beat buy & hold, not just absolute returns.
+    """
+    if any_liquidation:
+        return 0.0
+    return total_alpha - total_drawdown
+
+
+def _calculate_fitness_calmar(
+    total_return: float,
+    total_drawdown: float,
+    any_liquidation: bool,
+) -> float:
+    """Calmar ratio fitness: sum(returns) / sum(drawdowns).
+
+    Rewards high returns with low drawdowns. A strategy with 20% return
+    and 5% drawdown (calmar=4) beats one with 40% return and 20% drawdown (calmar=2).
+    """
+    if any_liquidation:
+        return 0.0
+    # Avoid division by zero - use minimum drawdown of 1%
+    return total_return / max(total_drawdown, 1.0)
+
+
+def _calculate_fitness_sharpe(
+    window_returns: list[float],
+    any_liquidation: bool,
+) -> float:
+    """Sharpe-like fitness: mean(returns) / std(returns).
+
+    Rewards consistent returns. Penalizes volatile strategies even if
+    they have high average returns.
+    """
+    if any_liquidation or len(window_returns) < 2:
+        return 0.0
+
+    import statistics
+    mean_return = statistics.mean(window_returns)
+    std_return = statistics.stdev(window_returns)
+
+    # Avoid division by zero - use minimum std of 1%
+    # Multiply by sqrt(n) to scale with number of windows
+    n = len(window_returns)
+    return (mean_return / max(std_return, 1.0)) * (n ** 0.5)
+
+
 def _evaluate_individual_on_windows(
     individual: Individual,
     windows: list[WindowData],
@@ -453,17 +540,20 @@ def _evaluate_individual_on_windows(
     investment_ratio: Decimal,
     leverage: int,
     funding_enabled: bool,
+    fitness_type: FitnessType = FitnessType.ALPHA,
 ) -> tuple[float, list[WindowResult]]:
     """Evaluate an individual across all windows.
 
     Returns:
         Tuple of (fitness, list of window results)
-        fitness = sum(returns) - sum(drawdowns)
+        Fitness calculation depends on fitness_type parameter.
         If any window has liquidation, fitness = 0
     """
     results = []
     total_return = 0.0
+    total_alpha = 0.0
     total_drawdown = 0.0
+    window_returns: list[float] = []
     any_liquidation = False
 
     for window in windows:
@@ -484,6 +574,7 @@ def _evaluate_individual_on_windows(
             max_drawdown_pct=metrics["max_drawdown_pct"],
             trades=metrics["total_trades"],
             liquidated=metrics["liquidated"],
+            buy_hold_pct=metrics["buy_hold_pct"],
         )
         results.append(result)
 
@@ -491,13 +582,21 @@ def _evaluate_individual_on_windows(
             any_liquidation = True
         else:
             total_return += result.return_pct
+            total_alpha += result.return_pct - result.buy_hold_pct
             total_drawdown += result.max_drawdown_pct
+            window_returns.append(result.return_pct)
 
-    # Liquidation in any window = fitness 0
-    if any_liquidation:
-        fitness = 0.0
+    # Calculate fitness based on selected type
+    if fitness_type == FitnessType.LEGACY:
+        fitness = _calculate_fitness_legacy(total_return, total_drawdown, any_liquidation)
+    elif fitness_type == FitnessType.ALPHA:
+        fitness = _calculate_fitness_alpha(total_alpha, total_drawdown, any_liquidation)
+    elif fitness_type == FitnessType.CALMAR:
+        fitness = _calculate_fitness_calmar(total_return, total_drawdown, any_liquidation)
+    elif fitness_type == FitnessType.SHARPE:
+        fitness = _calculate_fitness_sharpe(window_returns, any_liquidation)
     else:
-        fitness = total_return - total_drawdown
+        fitness = _calculate_fitness_alpha(total_alpha, total_drawdown, any_liquidation)
 
     return fitness, results
 
@@ -524,6 +623,7 @@ def _evaluate_individual_parallel(individual: Individual) -> tuple[float, list[W
         investment_ratio=_parallel_params["investment_ratio"],
         leverage=_parallel_params["leverage"],
         funding_enabled=_parallel_params["funding_enabled"],
+        fitness_type=_parallel_params.get("fitness_type", FitnessType.ALPHA),
     )
 
 
@@ -626,6 +726,7 @@ def train(
     test_period: str = "1M",
     step_period: str = "1M",
     seed_strategy: str | None = None,
+    fitness_type: FitnessType = FitnessType.ALPHA,
 ) -> tuple[Strategy, TestResult]:
     """Train a futures trading strategy using walk-forward validation.
 
@@ -682,7 +783,13 @@ def train(
         logger.info("-" * 60)
         logger.info("WALK-FORWARD VALIDATION")
         logger.info("Test: %s (%d days) | Step: %s (%d days)", test_period, test_days, step_period, step_days)
-        logger.info("Fitness = Σ(return) - Σ(drawdown) | Liquidation = 0")
+        fitness_desc = {
+            FitnessType.LEGACY: "Σ(return) - Σ(drawdown)",
+            FitnessType.ALPHA: "Σ(alpha) - Σ(drawdown) where alpha=return-buyhold",
+            FitnessType.CALMAR: "Σ(return) / Σ(drawdown)",
+            FitnessType.SHARPE: "mean(returns) / std(returns)",
+        }
+        logger.info("Fitness [%s] = %s", fitness_type.value, fitness_desc.get(fitness_type, "unknown"))
 
     logger.info("=" * 60)
 
@@ -766,8 +873,9 @@ def train(
 
     # Initialize population
     logger.info("[3/4] Evolving population...")
+    notify(f"🚀 {symbol} Training Started!\nPop: {population_size}, Gen: {generations}\nInterval: {interval}")
     population = Population.create_random(
-        population_size, rules_per_individual, price_hint=price_hint, seed_individual=seed_individual
+        population_size, rules_per_individual, price_hint=price_hint, seed_individual=seed_individual, interval=interval
     )
 
     bar_manager = enlighten.get_manager()
@@ -789,6 +897,7 @@ def train(
         "investment_ratio": investment_ratio,
         "leverage": leverage,
         "funding_enabled": funding_enabled,
+        "fitness_type": fitness_type,
     }
 
     for gen in range(generations):
@@ -823,6 +932,7 @@ def train(
                     investment_ratio=investment_ratio,
                     leverage=leverage,
                     funding_enabled=funding_enabled,
+                    fitness_type=fitness_type,
                 )
                 individual.fitness = fitness
 
@@ -840,15 +950,19 @@ def train(
         # Log progress every generation
         avg_return = sum(r.return_pct for r in gen_best_results) / len(gen_best_results) if gen_best_results else 0
         logger.info(
-            "Gen %d: Best fitness=%.2f, Avg return=%.2f%%",
+            "Gen %d: Best fitness=%.2f, Avg monthly return=%.2f%%",
             gen + 1,
             gen_best_fitness,
             avg_return,
         )
 
+        # Send Telegram notification for every generation
+        yearly_return = 100 * ((1 + avg_return / 100) ** 12)
+        notify(f"🧬 {symbol} Gen {gen + 1}/{generations}\nFitness: {gen_best_fitness:.2f}\nReturn: {avg_return:.2f}%\n$100 → ${yearly_return:.0f}")
+
         # Evolve (except last generation)
         if gen < generations - 1:
-            population = population.evolve(price_hint=price_hint)
+            population = population.evolve(price_hint=price_hint, interval=interval)
 
         gen_bar.update()
 
@@ -866,6 +980,7 @@ def train(
             investment_ratio=investment_ratio,
             leverage=leverage,
             funding_enabled=funding_enabled,
+            fitness_type=fitness_type,
         )
 
     # Calculate aggregate metrics
@@ -899,7 +1014,8 @@ def train(
         100 * positive_windows / len(best_results),
     )
     logger.info("Liquidations: %d", liquidations)
-    logger.info("Average return: %.2f%%", avg_return)
+    annualized_return = ((1 + avg_return / 100) ** 12 - 1) * 100
+    logger.info("Average monthly return: %.2f%% (~%.0f%% annualized)", avg_return, annualized_return)
     logger.info("Average drawdown: %.2f%%", avg_drawdown)
     logger.info("Fitness: %.2f", best_fitness)
     logger.info("Total trades: %d", total_trades)
@@ -980,5 +1096,11 @@ def train(
     logger.info("Strategy saved: %s", strategy_path)
     logger.info("Results saved: %s", result_path)
     logger.info("=" * 60)
+
+    # Final notification
+    avg_return = sum(r.return_pct for r in best_results) / len(best_results) if best_results else 0
+    avg_dd = sum(r.max_drawdown_pct for r in best_results) / len(best_results) if best_results else 0
+    yearly_return = 100 * ((1 + avg_return / 100) ** 12)
+    notify(f"✅ {symbol} Training Complete!\nStrategy: {strategy.id}\nFitness: {best_fitness:.2f}\nReturn: {avg_return:.2f}%\nDrawdown: {avg_dd:.2f}%\n$100 → ${yearly_return:.0f}")
 
     return strategy, result

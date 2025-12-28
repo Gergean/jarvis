@@ -1,13 +1,16 @@
 """Download command for fetching historical kline data from Binance."""
 
 import csv
+import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from binance.client import Client
+from binance.exceptions import BinanceAPIException
 
 from jarvis.logging import logger
+from jarvis.settings import RATE_LIMIT_DELAY
 
 
 def download(
@@ -33,7 +36,7 @@ def download(
     """
     # Default dates
     if end_dt is None:
-        end_dt = datetime.utcnow()
+        end_dt = datetime.now(UTC).replace(tzinfo=None)
     if start_dt is None:
         start_dt = end_dt - timedelta(days=365)
 
@@ -65,6 +68,14 @@ def download(
                     endTime=end_ts,
                     limit=1000,
                 )
+                time.sleep(RATE_LIMIT_DELAY)  # Rate limiting
+            except BinanceAPIException as e:
+                if e.code == -1003:  # Rate limit exceeded
+                    logger.warning("Rate limit hit, waiting 60s...")
+                    time.sleep(60)
+                    continue
+                logger.error("Binance API error for %s: %s", symbol, e)
+                break
             except Exception as e:
                 logger.error("Failed to fetch %s: %s", symbol, e)
                 break

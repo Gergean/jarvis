@@ -1,0 +1,112 @@
+{
+  "id": "BNBUSDT_f1d3717e",
+  "symbol": "BNBUSDT",
+  "created_at": "2025-12-28T09:20:46.918971",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-28",
+    "end_date": "2025-12-28",
+    "generations": 30,
+    "population_size": 50,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 26
+          }
+        },
+        "target": 37.46748196087509,
+        "weight": 286395.16743151634
+      },
+      {
+        "indicator": {
+          "type": "BBANDS_B",
+          "params": {
+            "period": 60,
+            "nbdev": 1.8416321998742773
+          }
+        },
+        "target": 0.7974631243752972,
+        "weight": -468490.09080079314
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 13
+          }
+        },
+        "target": 40.27662800988495,
+        "weight": 793788.2737111528
+      },
+      {
+        "indicator": {
+          "type": "BBANDS_B",
+          "params": {
+            "period": 175,
+            "nbdev": 2.222543627805484
+          }
+        },
+        "target": 1.1177737651794204,
+        "weight": -237020.3846987864
+      },
+      {
+        "indicator": {
+          "type": "BBANDS_B",
+          "params": {
+            "period": 4,
+            "nbdev": 2.2898707736193913
+          }
+        },
+        "target": 0.8041144505884887,
+        "weight": -519182.10751923465
+      },
+      {
+        "indicator": {
+          "type": "BBANDS_B",
+          "params": {
+            "period": 66,
+            "nbdev": 2.367043094592453
+          }
+        },
+        "target": 0.7153222918062982,
+        "weight": -519182.10751923465
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 3
+          }
+        },
+        "target": 39.555296954670155,
+        "weight": 397764.08794313687
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 195
+          }
+        },
+        "target": 26.467107297011765,
+        "weight": -205918.3987936339
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 198
+          }
+        },
+        "target": 21.03062948764115,
+        "weight": -433159.07152997155
+      }
+    ],
+    "fitness": -28.71162921705853
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "id": "SOLUSDT_ef613e00",
+  "symbol": "SOLUSDT",
+  "created_at": "2025-12-26T12:27:04.770173",
+  "training": {
+    "interval": "4h",
+    "start_date": "2025-11-26",
+    "end_date": "2025-12-26",
+    "generations": 3,
+    "population_size": 10,
+    "rules_per_individual": 9
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "WILLR",
+          "params": {
+            "period": 47
+          }
+        },
+        "target": 0.049468925063282265,
+        "weight": 295458.27601132984
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 3
+          }
+        },
+        "target": 58.70242178310674,
+        "weight": -822956.1809546952
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 2,
+            "fastk_period": 4
+          }
+        },
+        "target": 86.59453989286577,
+        "weight": 958982.181357125
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 172
+          }
+        },
+        "target": -129.70258630672663,
+        "weight": -564579.073277188
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 7,
+            "fastk_period": 6
+          }
+        },
+        "target": 99.31508614952996,
+        "weight": -766832.0256875339
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 111
+          }
+        },
+        "target": -118.05333312930802,
+        "weight": -995577.9323522291
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 14
+          }
+        },
+        "target": 10.61198773036293,
+        "weight": 357789.892894243
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 78.90695425149524,
+        "weight": 46858.34862229235
+      },
+      {
+        "indicator": {
+          "type": "RSI",
+          "params": {
+            "period": 197
+          }
+        },
+        "target": 54.418160703968475,
+        "weight": -693916.5604300112
+      }
+    ],
+    "fitness": 55.915954764285495
+  }
+}

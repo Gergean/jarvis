@@ -1,0 +1,99 @@
+{
+  "id": "NEARUSDT_6dc3bf3a",
+  "symbol": "NEARUSDT",
+  "created_at": "2025-12-27T15:13:59.810009",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-27",
+    "end_date": "2025-12-27",
+    "generations": 100,
+    "population_size": 1000,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 21.40006421219418,
+        "weight": -901369.6333831452
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 113
+          }
+        },
+        "target": -15.157638404296623,
+        "weight": -801191.1333693392
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 86
+          }
+        },
+        "target": -18.854016076122804,
+        "weight": -849826.1288911056
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 94
+          }
+        },
+        "target": -179.9142804782068,
+        "weight": -717503.26158818
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 16.044641034314555,
+        "weight": 977883.2922964138
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 4,
+            "fastk_period": 5
+          }
+        },
+        "target": 6.689185905679629,
+        "weight": -463313.33526593616
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 23
+          }
+        },
+        "target": 48.52556674763258,
+        "weight": -458076.3997315578
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 8
+          }
+        },
+        "target": 38.79454393258419,
+        "weight": 631562.0774880884
+      }
+    ],
+    "fitness": 39.93941715350385
+  }
+}

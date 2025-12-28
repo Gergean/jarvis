@@ -1,0 +1,119 @@
+{
+  "id": "AVAXUSDT_0cc4bc2f",
+  "symbol": "AVAXUSDT",
+  "created_at": "2025-12-27T08:02:57.280825",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-27",
+    "end_date": "2025-12-27",
+    "generations": 100,
+    "population_size": 1000,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "STOCH",
+          "params": {
+            "fastk_period": 3,
+            "slowk_period": 3
+          }
+        },
+        "target": 36.68655749374711,
+        "weight": -1077888.5434375538
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 54
+          }
+        },
+        "target": 43.662996880440744,
+        "weight": -737094.5522652406
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 111
+          }
+        },
+        "target": -111.2525596482475,
+        "weight": -635593.2362062837
+      },
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 58.479677419741506,
+        "weight": 869488.4127685388
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 21.259556771294818,
+        "weight": -420811.79381009773
+      },
+      {
+        "indicator": {
+          "type": "WILLR",
+          "params": {
+            "period": 5
+          }
+        },
+        "target": -47.98323410547263,
+        "weight": -1040330.4639347626
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 11
+          }
+        },
+        "target": 24.97944316036009,
+        "weight": 882270.8253545214
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 84.92490280140682,
+        "weight": -881400.9109639347
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 65
+          }
+        },
+        "target": 9.061636818474806,
+        "weight": 623718.2284723488
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 3.3977451133787735,
+        "weight": -564584.3805359105
+      }
+    ],
+    "fitness": 61.971902736236785
+  }
+}

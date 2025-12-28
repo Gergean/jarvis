@@ -240,47 +240,65 @@ Kural 3: MACD_HIST=150, hedef=0, ağırlık=+20,000 → (150-0)*20,000/100,000 =
 
 ### Population (Popülasyon) = Strateji Havuzu
 
-50 farklı strateji aynı anda yarışır (varsayılan):
+100 farklı strateji aynı anda yarışır (train komutu varsayılanı):
 
 ```python
 class Population:
-    individuals: list[Individual]  # 50 strateji
+    individuals: list[Individual]  # 100 strateji (train varsayılanı)
     generation: int = 0            # Şu anki nesil
 
-    # Ayarlar
-    population_size: int = 50      # Kaç birey?
-    elitism_ratio: float = 0.1     # En iyi %10'u koru (5 birey)
+    # Ayarlar (Population sınıfı varsayılanı 50, train komutu 100 kullanır)
+    population_size: int = 100     # Kaç birey?
+    elitism_ratio: float = 0.1     # En iyi %10'u koru (10 birey)
     mutation_rate: float = 0.1     # %10 mutasyon şansı
 ```
 
 ### Fitness (Uygunluk) = Başarı Ölçüsü
 
-Bir stratejinin ne kadar iyi olduğunu ölçer. Biz "Buy & Hold'u ne kadar yendin?" diye soruyoruz:
+Bir stratejinin ne kadar iyi olduğunu ölçer. İki farklı hesaplama yöntemi vardır:
+
+**1. Walk-Forward Validation (Varsayılan - train komutu):**
+
+Walk-forward modunda strateji birden fazla pencerede (window) test edilir:
+
+```
+fitness = Σ(pencere_getirisi) - Σ(pencere_drawdown)
+```
+
+- Tüm pencerelerin getirisi toplanır
+- Tüm pencerelerin maksimum drawdown'ı toplanır
+- Herhangi bir pencerede liquidation olursa → fitness = 0
+
+Bu formül hem getiriyi maksimize etmeyi hem de riski minimize etmeyi teşvik eder.
+
+**2. Tek Dönem Değerlendirme (Population.evaluate_fitness):**
 
 ```
 fitness = strateji_getirisi - buy_hold_getirisi
 ```
 
-**Örnekler:**
+**Walk-Forward Fitness Örnekleri:**
 
-| Strateji Getirisi | BTC Değişimi | Fitness | Yorum |
-|-------------------|--------------|---------|-------|
-| +20% | +10% | +10 | Harika! BTC'den 2x iyi |
-| +10% | +10% | 0 | BTC almakla aynı |
-| +5% | +10% | -5 | Kötü, BTC alsaydık daha iyiydi |
-| +15% | -5% | +20 | Mükemmel! Düşen piyasada bile kar |
+| Pencere 1 | Pencere 2 | Pencere 3 | DD Toplamı | Fitness |
+|-----------|-----------|-----------|------------|---------|
+| +5% | +3% | +2% | 6% | (10) - 6 = 4 |
+| +10% | -2% | +5% | 8% | (13) - 8 = 5 |
+| +15% | LIQ | +3% | - | 0 (liquidation!) |
 
 ### Fitness Fonksiyonu Detayları
 
-Fitness hesaplaması `Population.evaluate_fitness()` metodunda yapılır. Her strateji için gerçekçi bir futures backtest simülasyonu çalıştırılır.
+Fitness hesaplaması `train.py` modülünde walk-forward validation ile yapılır. Her strateji için tüm pencerelerde gerçekçi futures backtest simülasyonu çalıştırılır.
 
-#### Temel Formül
+#### Walk-Forward Formülü
 
 ```
-fitness = strateji_getirisi(%) - buy_hold_getirisi(%)
+fitness = Σ(window_return_pct) - Σ(window_max_drawdown_pct)
+
+Herhangi bir pencerede liquidation varsa:
+  fitness = 0
 ```
 
-Pozitif fitness = Strateji, coin'i sadece tutmaktan daha iyi performans gösterdi.
+Pozitif fitness = Strateji, tüm pencerelerde tutarlı performans gösterdi.
 
 #### Simülasyon Kuralları
 
@@ -308,7 +326,9 @@ Pozitif fitness = Strateji, coin'i sadece tutmaktan daha iyi performans gösterd
 
 | Özellik | Açıklama |
 |---------|----------|
-| **Buy & Hold benchmark** | Salt getiri yerine "piyasayı yenmek" ölçülür |
+| **Walk-Forward Validation** | Birden fazla pencerede test ederek overfitting önlenir |
+| **Drawdown Cezası** | Yüksek drawdown, yüksek getiriyi dengeler |
+| **Liquidation = 0** | Tek bir liquidation bile stratejiyi diskalifiye eder |
 | **Gerçekçi maliyetler** | Komisyon, funding, liquidation simüle edilir |
 | **Risk yönetimi** | %20 investment ratio ile tek pozisyon tüm sermayeyi riske atmaz |
 | **Position awareness** | LONG'dayken tekrar LONG açılmaz, önce CLOSE gerekir |
@@ -323,7 +343,7 @@ Pozitif fitness = Strateji, coin'i sadece tutmaktan daha iyi performans gösterd
 Anne Strateji:                    Baba Strateji:
 ├── RSI(14) > 70 * +0.8          ├── RSI(21) > 65 * +0.6
 ├── SMA(50) > 95000 * -0.5       ├── EMA(20) > 90000 * +0.4
-└── MACD > 0 * +0.3              └── ATR(14) > 500 * -0.2
+└── MACD > 0 * +0.3              └── VOLUME(20) > 1.5 * -0.2
 
 Çocuk (rastgele seçim):
 ├── RSI(14) > 70 * +0.8    ← Anneden

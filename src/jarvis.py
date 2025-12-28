@@ -6,7 +6,6 @@ import doctest
 import os
 import webbrowser
 from datetime import datetime
-from decimal import Decimal  # Used by trade_parser
 from os.path import exists
 
 import sentry_sdk
@@ -19,11 +18,12 @@ from jarvis import (
     paper_trade,
     pinescript,
     plot,
+    status,
     test,
     trade,
-    trade_with_strategies,
     train,
 )
+from jarvis.commands.train import FitnessType
 from jarvis.logging import logger
 from jarvis.settings import get_settings, settings
 
@@ -53,12 +53,13 @@ def main() -> None:
 
     doctest_parser = subparsers.add_parser("doctest")
     download_parser = subparsers.add_parser("download")
+    message_parser = subparsers.add_parser("message")
     paper_parser = subparsers.add_parser("paper")
     pinescript_parser = subparsers.add_parser("pinescript")
     plot_parser = subparsers.add_parser("plot")
+    status_parser = subparsers.add_parser("status")
     test_parser = subparsers.add_parser("test")
     trade_parser = subparsers.add_parser("trade")
-    trade_ga_parser = subparsers.add_parser("trade-ga")
     train_parser = subparsers.add_parser("train")
 
     def dt_type(s: str) -> datetime:
@@ -66,6 +67,18 @@ def main() -> None:
 
     doctest_parser.add_argument(
         "-v", dest="verbose", default=False, action="store_true", help="Gives verbose output when set."
+    )
+
+    # Message parser arguments
+    message_parser.add_argument(
+        "account_name",
+        type=str,
+        help="Account name to send message to (e.g., mirat)",
+    )
+    message_parser.add_argument(
+        "message",
+        type=str,
+        help="Message to send via Telegram",
     )
 
     # Paper trading parser arguments
@@ -109,12 +122,8 @@ def main() -> None:
         help="Wallet identifier",
     )
     paper_trade_parser.add_argument(
-        "-et",
-        dest="end_dt",
-        default=None,
-        type=dt_type,
-        metavar="END_TIME",
-        help="End date (for testing with historical data). Default: now.",
+        "--end", dest="end_dt", default=None, type=dt_type,
+        help="End date for historical simulation. Default: now.",
     )
 
     paper_info_parser = paper_subparsers.add_parser("info", help="Show wallet info and stats")
@@ -128,21 +137,15 @@ def main() -> None:
 
     # Pinescript parser arguments
     pinescript_parser.add_argument(
-        "-s",
-        dest="strategy_id",
-        metavar="STRATEGY_ID",
+        "strategy_id",
+        metavar="STRATEGY",
         type=str,
-        required=True,
         help="Strategy ID (e.g., ETHUSDT_5bdb12c7) or path to JSON file",
     )
 
     pinescript_parser.add_argument(
-        "-o",
-        dest="output_path",
-        metavar="OUTPUT_PATH",
-        type=str,
-        default=None,
-        help="Output path for Pine Script file. Default: strategies/{strategy_id}.pine",
+        "-o", "--output", dest="output_path", type=str, default=None,
+        help="Output path. Default: strategies/{strategy_id}.pine",
     )
 
     # Plot parser arguments
@@ -187,103 +190,71 @@ def main() -> None:
     )
 
     trade_parser.add_argument(
-        "-ba",
-        dest="base_asset",
-        metavar="BASE_ASSET",
-        default="USDT",
+        "-a", "--account",
+        dest="account_name",
+        default=None,
         type=str,
-        help="The base asset that you want to trade. Default: %(default)s",
+        help="Specific account to trade. Default: all accounts in accounts/ directory.",
     )
 
     trade_parser.add_argument(
-        "-ta",
-        dest="trade_assets",
-        nargs="+",
-        metavar="TRADE_ASSET",
-        help="List of assets that you want to trade against base asset.",
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        default=False,
+        help="Show signals without executing trades.",
+    )
+
+    # Status parser arguments
+    status_parser.add_argument(
+        "-a", "--account",
+        dest="account_name",
+        default=None,
         type=str,
-        required=True,
+        help="Specific account to show status for. Default: all accounts.",
     )
-
-    trade_parser.add_argument(
-        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval of klines to check."
-    )
-
-    trade_parser.add_argument(
-        "-ir",
-        dest="investment_ratio",
-        default=Decimal("0.2"),
-        type=Decimal,
-        metavar="INVESTMENT_RATIO",
-        help="Investment ratio of platform. Default: %(default)s",
+    status_parser.add_argument(
+        "--notify",
+        dest="send_notification",
+        action="store_true",
+        default=False,
+        help="Send summary to Telegram.",
     )
 
     # Train parser arguments
     train_parser.add_argument(
-        "-s",
-        dest="symbol",
+        "symbol",
         metavar="SYMBOL",
         type=str,
-        required=True,
         help="Trading pair to train (e.g., BTCUSDT)",
     )
 
     train_parser.add_argument(
-        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval. Default: %(default)s"
+        "-i", "--interval", dest="interval", default="1h", type=str, help="Interval. Default: %(default)s"
     )
 
     train_parser.add_argument(
-        "-st",
-        dest="start_dt",
-        default=None,
-        type=dt_type,
-        metavar="START_TIME",
-        help="Training start date. Default: 6 months ago.",
+        "--start", dest="start_dt", default=None, type=dt_type, help="Start date (YYYY-MM-DDTHH:MM:SS). Default: 6 months ago."
     )
 
     train_parser.add_argument(
-        "-et",
-        dest="end_dt",
-        default=None,
-        type=dt_type,
-        metavar="END_TIME",
-        help="Training end date. Default: now.",
+        "--end", dest="end_dt", default=None, type=dt_type, help="End date (YYYY-MM-DDTHH:MM:SS). Default: now."
     )
 
     train_parser.add_argument(
-        "-ps",
-        dest="population_size",
-        default=100,
-        type=int,
-        metavar="POPULATION_SIZE",
-        help="Number of individuals. Default: %(default)s",
+        "-p", "--population", dest="population_size", default=100, type=int, help="Population size. Default: %(default)s"
     )
 
     train_parser.add_argument(
-        "-g",
-        dest="generations",
-        default=30,
-        type=int,
-        metavar="GENERATIONS",
-        help="Number of generations. Default: %(default)s",
+        "-g", "--generations", dest="generations", default=30, type=int, help="Generations. Default: %(default)s"
     )
 
     train_parser.add_argument(
-        "-r",
-        dest="rules_per_individual",
-        default=8,
-        type=int,
-        metavar="RULES",
-        help="Rules per individual. Default: %(default)s",
+        "-r", "--rules", dest="rules_per_individual", default=8, type=int, help="Rules per individual. Default: %(default)s"
     )
 
     train_parser.add_argument(
-        "-l",
-        dest="leverage",
-        default=1,
-        type=int,
-        metavar="LEVERAGE",
-        help="Futures leverage (1-10). Default: %(default)s",
+        "-l", "--leverage", dest="leverage", default=1, type=int, help="Leverage (1-10). Default: %(default)s"
     )
 
     train_parser.add_argument(
@@ -338,118 +309,62 @@ def main() -> None:
         help="Path to strategy JSON to use as seed (e.g., strategies/ETHUSDT_abc123.json)",
     )
 
-    # Trade-GA parser arguments (trade with GA strategies)
-    trade_ga_parser.add_argument(
-        "-s",
-        dest="strategy_ids",
-        nargs="+",
-        metavar="STRATEGY_ID",
+    train_parser.add_argument(
+        "--fitness",
+        dest="fitness_type",
+        default="alpha",
         type=str,
-        required=True,
-        help="Strategy IDs to use (e.g., BTCUSDT_fe43f298 ETHUSDT_abc123)",
-    )
-
-    trade_ga_parser.add_argument(
-        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval. Default: %(default)s"
-    )
-
-    trade_ga_parser.add_argument(
-        "-ir",
-        dest="investment_ratio",
-        default=Decimal("0.2"),
-        type=Decimal,
-        metavar="INVESTMENT_RATIO",
-        help="Investment ratio. Default: %(default)s",
-    )
-
-    trade_ga_parser.add_argument(
-        "--dry-run",
-        dest="dry_run",
-        action="store_true",
-        default=False,
-        help="Dry run: show signals without executing trades.",
+        choices=["legacy", "alpha", "calmar", "sharpe"],
+        help="Fitness function: legacy (return-dd), alpha (vs buy&hold), calmar (return/dd), sharpe (consistency). Default: alpha",
     )
 
     # Test parser arguments
     test_parser.add_argument(
-        "-s",
-        dest="strategy_id",
-        metavar="STRATEGY_ID",
+        "strategy_id",
+        metavar="STRATEGY",
         type=str,
-        required=True,
         help="Strategy ID to test (e.g., BTCUSDT_abc123)",
     )
 
     test_parser.add_argument(
-        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval. Default: %(default)s"
+        "-i", "--interval", dest="interval", default="1h", type=str, help="Interval. Default: %(default)s"
     )
 
     test_parser.add_argument(
-        "-st",
-        dest="start_dt",
-        default=None,
-        type=dt_type,
-        metavar="START_TIME",
-        help="Test start date. Default: 3 months ago.",
+        "--start", dest="start_dt", default=None, type=dt_type, help="Start date. Default: 3 months ago."
     )
 
     test_parser.add_argument(
-        "-et",
-        dest="end_dt",
-        default=None,
-        type=dt_type,
-        metavar="END_TIME",
-        help="Test end date. Default: now.",
+        "--end", dest="end_dt", default=None, type=dt_type, help="End date. Default: now."
     )
 
     test_parser.add_argument(
-        "-l",
-        dest="leverage",
-        default=1,
-        type=int,
-        metavar="LEVERAGE",
-        help="Futures leverage (1-10). Default: %(default)s",
+        "-l", "--leverage", dest="leverage", default=1, type=int, help="Leverage (1-10). Default: %(default)s"
     )
 
     test_parser.add_argument(
-        "--no-funding",
-        dest="funding_enabled",
-        action="store_false",
-        default=True,
-        help="Disable funding fee simulation.",
+        "--no-funding", dest="funding_enabled", action="store_false", default=True, help="Disable funding fee simulation."
     )
 
     # Download parser arguments
     download_parser.add_argument(
-        "-s",
-        dest="symbols",
+        "symbols",
         nargs="+",
         metavar="SYMBOL",
         type=str,
-        required=True,
         help="Trading pairs to download (e.g., BTCUSDT ETHUSDT)",
     )
 
     download_parser.add_argument(
-        "-i", dest="interval", default="1h", metavar="INTERVAL", type=str, help="Interval. Default: %(default)s"
+        "-i", "--interval", dest="interval", default="1h", type=str, help="Interval. Default: %(default)s"
     )
 
     download_parser.add_argument(
-        "-st",
-        dest="start_dt",
-        default=None,
-        type=dt_type,
-        metavar="START_TIME",
-        help="Start date. Default: 1 year ago.",
+        "--start", dest="start_dt", default=None, type=dt_type, help="Start date. Default: 1 year ago."
     )
 
     download_parser.add_argument(
-        "-et",
-        dest="end_dt",
-        default=None,
-        type=dt_type,
-        metavar="END_TIME",
-        help="End date. Default: now.",
+        "--end", dest="end_dt", default=None, type=dt_type, help="End date. Default: now."
     )
 
     kwargs = parser.parse_args()
@@ -471,32 +386,46 @@ def main() -> None:
     if kwargs.subparser == "doctest":
         # Run doctests on all modules
         import jarvis.client
+        import jarvis.genetics.indicators
         import jarvis.models
-        import jarvis.signals.consecutive
         import jarvis.utils
 
         results = []
         results.append(doctest.testmod(jarvis.utils, verbose=kwargs.verbose))
         results.append(doctest.testmod(jarvis.models, verbose=kwargs.verbose))
         results.append(doctest.testmod(jarvis.client, verbose=kwargs.verbose))
-        results.append(doctest.testmod(jarvis.signals.consecutive, verbose=kwargs.verbose))
+        results.append(doctest.testmod(jarvis.genetics.indicators, verbose=kwargs.verbose))
 
         total_failures = sum(r.failed for r in results)
         total_tests = sum(r.attempted for r in results)
         print(f"Ran {total_tests} doctests, {total_failures} failures")
 
     elif kwargs.subparser == "trade":
-        trade(kwargs.base_asset, kwargs.trade_assets, kwargs.interval, kwargs.investment_ratio)
-
-    elif kwargs.subparser == "trade-ga":
-        trade_with_strategies(
-            kwargs.strategy_ids,
-            kwargs.interval,
-            kwargs.investment_ratio,
+        trade(
+            account_name=kwargs.account_name,
             dry_run=kwargs.dry_run,
         )
 
+    elif kwargs.subparser == "status":
+        status(account_name=kwargs.account_name, send_notification=kwargs.send_notification)
+
+    elif kwargs.subparser == "message":
+        from jarvis.accounts import load_account
+
+        try:
+            account = load_account(kwargs.account_name)
+            if not account.telegram_dm_id:
+                print(f"Account {kwargs.account_name} has no TELEGRAM_DM_ID configured")
+            else:
+                account.notify(kwargs.message)
+                print(f"Message sent to {kwargs.account_name}")
+        except FileNotFoundError:
+            print(f"Account not found: {kwargs.account_name}")
+        except Exception as e:
+            print(f"Error: {e}")
+
     elif kwargs.subparser == "train":
+        fitness_type = FitnessType(kwargs.fitness_type)
         strategy, result = train(
             kwargs.symbol,
             kwargs.interval,
@@ -512,6 +441,7 @@ def main() -> None:
             test_period=kwargs.test_period,
             step_period=kwargs.step_period,
             seed_strategy=kwargs.seed_strategy,
+            fitness_type=fitness_type,
         )
         print(f"Strategy: {strategy.id}")
         print(f"Return: {result.return_pct:.2f}%")

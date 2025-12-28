@@ -9,9 +9,9 @@ from jarvis.commands import (
     paper_trade,
     pinescript,
     plot,
+    status,
     test,
     trade,
-    trade_with_strategies,
     train,
 )
 from jarvis.models import ActionType, Color, FakeResponse, Kline, Position
@@ -40,8 +40,8 @@ __all__ = [
     "paper_trade",
     "pinescript",
     "plot",
+    "status",
     "test",
     "trade",
-    "trade_with_strategies",
     "train",
 ]

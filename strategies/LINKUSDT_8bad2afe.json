@@ -1,0 +1,90 @@
+{
+  "id": "LINKUSDT_8bad2afe",
+  "symbol": "LINKUSDT",
+  "created_at": "2025-12-26T06:32:07.068930",
+  "training": {
+    "interval": "4h",
+    "start_date": "2024-12-26",
+    "end_date": "2025-12-26",
+    "generations": 120,
+    "population_size": 600,
+    "rules_per_individual": 8
+  },
+  "individual": {
+    "rules": [
+      {
+        "indicator": {
+          "type": "CCI",
+          "params": {
+            "period": 181
+          }
+        },
+        "target": -70.85413000037559,
+        "weight": -416202.92557152756
+      },
+      {
+        "indicator": {
+          "type": "ROC",
+          "params": {
+            "period": 37
+          }
+        },
+        "target": -26.723107095518134,
+        "weight": -918799.6427562879
+      },
+      {
+        "indicator": {
+          "type": "ADX",
+          "params": {
+            "period": 2
+          }
+        },
+        "target": 55.11886409124957,
+        "weight": 21972.236104002353
+      },
+      {
+        "indicator": {
+          "type": "STOCH",
+          "params": {
+            "fastk_period": 44,
+            "slowk_period": 5
+          }
+        },
+        "target": 41.40612584464059,
+        "weight": -867276.2636649631
+      },
+      {
+        "indicator": {
+          "type": "MFI",
+          "params": {
+            "period": 17
+          }
+        },
+        "target": 55.323688790886756,
+        "weight": -420326.5439202489
+      },
+      {
+        "indicator": {
+          "type": "STOCHRSI",
+          "params": {
+            "period": 23,
+            "fastk_period": 3
+          }
+        },
+        "target": 80.57847582211483,
+        "weight": 577485.9706802887
+      },
+      {
+        "indicator": {
+          "type": "VOLUME",
+          "params": {
+            "period": 57
+          }
+        },
+        "target": 2.515009946991647,
+        "weight": -308601.1855354042
+      }
+    ],
+    "fitness": 43.001668261722536
+  }
+}
